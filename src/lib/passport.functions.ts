@@ -6,21 +6,29 @@ const ExtractInput = z.object({
   mimeType: z.string().min(3),
 });
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 const SubmitInput = z.object({
   fullName: z.string().trim().min(1).max(200),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+  dateOfBirth: z.string().regex(ISO_DATE, "Date must be YYYY-MM-DD"),
   address: z.string().trim().max(500).optional().nullable(),
+  passportExpiry: z.string().regex(ISO_DATE, "Expiry must be YYYY-MM-DD"),
   extracted: z.object({
     fullName: z.string().nullable(),
     dateOfBirth: z.string().nullable(),
     address: z.string().nullable(),
+    passportExpiry: z.string().nullable(),
     confidence: z.object({
       fullName: z.number(),
       dateOfBirth: z.number(),
       address: z.number(),
+      passportExpiry: z.number(),
     }),
   }),
-});
+}).refine(
+  (v) => new Date(v.passportExpiry) >= new Date(new Date().toISOString().slice(0, 10)),
+  { path: ["passportExpiry"], message: "Passport is expired." },
+);
 
 export const extractPassport = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => ExtractInput.parse(input))
