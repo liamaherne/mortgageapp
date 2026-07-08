@@ -573,6 +573,19 @@ function ReviewPanel({
             extractedValue={extracted?.address}
             placeholder="Not typically present on passports — enter if applicable"
           />
+          <Field
+            id="passportExpiry"
+            label="Passport Expiry Date"
+            type="date"
+            value={form.passportExpiry}
+            onChange={(v) => setField("passportExpiry", v)}
+            error={errors.passportExpiry}
+            confidence={extracted?.confidence.passportExpiry}
+            isLowConf={lowConfFields.has("passportExpiry")}
+            confirmed={confirmed.passportExpiry}
+            onConfirm={(v) => setConfirm("passportExpiry", v)}
+            extractedValue={extracted?.passportExpiry}
+          />
         </fieldset>
 
         <div className="mt-auto flex flex-col gap-2 border-t pt-4">
