@@ -299,8 +299,19 @@ function PassportIntakePage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        <MortgageFlowSection />
+
+        <div className="mb-6 mt-12 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Back-office · Passport intake
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
         {status === "submitted" ? (
           <SubmittedView id={submittedId} onReset={reset} />
+
         ) : status === "idle" ? (
           <WelcomeCard
             onSelect={() => inputRef.current?.click()}
