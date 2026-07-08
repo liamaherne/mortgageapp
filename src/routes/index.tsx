@@ -129,9 +129,9 @@ function PassportIntakePage() {
     setPreviewUrl(null);
     setStatus("idle");
     setExtracted(null);
-    setForm({ fullName: "", dateOfBirth: "", address: "" });
+    setForm({ fullName: "", dateOfBirth: "", address: "", passportExpiry: "" });
     setErrors({});
-    setConfirmed({ fullName: false, dateOfBirth: false, address: false });
+    setConfirmed({ fullName: false, dateOfBirth: false, address: false, passportExpiry: false });
     setSubmittedId(null);
     if (inputRef.current) inputRef.current.value = "";
   }, [revokePreview]);
