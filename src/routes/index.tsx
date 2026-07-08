@@ -53,10 +53,21 @@ type Extracted = {
   fullName: string | null;
   dateOfBirth: string | null;
   address: string | null;
-  confidence: { fullName: number; dateOfBirth: number; address: number };
+  passportExpiry: string | null;
+  confidence: {
+    fullName: number;
+    dateOfBirth: number;
+    address: number;
+    passportExpiry: number;
+  };
 };
 
-type FormState = { fullName: string; dateOfBirth: string; address: string };
+type FormState = {
+  fullName: string;
+  dateOfBirth: string;
+  address: string;
+  passportExpiry: string;
+};
 type Errors = Partial<Record<keyof FormState, string>>;
 
 function fileToBase64(file: File): Promise<string> {
@@ -82,12 +93,18 @@ function PassportIntakePage() {
     "idle" | "extracting" | "review" | "extract_failed" | "manual" | "submitting" | "submitted"
   >("idle");
   const [extracted, setExtracted] = useState<Extracted | null>(null);
-  const [form, setForm] = useState<FormState>({ fullName: "", dateOfBirth: "", address: "" });
+  const [form, setForm] = useState<FormState>({
+    fullName: "",
+    dateOfBirth: "",
+    address: "",
+    passportExpiry: "",
+  });
   const [errors, setErrors] = useState<Errors>({});
   const [confirmed, setConfirmed] = useState<Record<keyof FormState, boolean>>({
     fullName: false,
     dateOfBirth: false,
     address: false,
+    passportExpiry: false,
   });
   const [submittedId, setSubmittedId] = useState<string | null>(null);
 
@@ -96,6 +113,7 @@ function PassportIntakePage() {
     const s = new Set<keyof FormState>();
     if (extracted.confidence.fullName < LOW_CONFIDENCE) s.add("fullName");
     if (extracted.confidence.dateOfBirth < LOW_CONFIDENCE) s.add("dateOfBirth");
+    if (extracted.confidence.passportExpiry < LOW_CONFIDENCE) s.add("passportExpiry");
     // Only flag address if extractor claims to have found one with low confidence
     if (extracted.address && extracted.confidence.address < LOW_CONFIDENCE) s.add("address");
     return s;
