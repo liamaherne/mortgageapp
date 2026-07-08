@@ -364,7 +364,81 @@ function PassportIntakePage() {
   );
 }
 
+function MortgageFlowSection() {
+  return (
+    <section className="relative overflow-hidden rounded-3xl bg-[#0b1436] text-white shadow-[0_30px_80px_-30px_rgba(11,20,54,0.45)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(233,196,106,0.22),transparent_55%)]" />
+      <div className="relative grid gap-8 p-8 sm:p-12 md:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] md:gap-12">
+        <div>
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#e9c46a]">
+            <Sparkles className="h-3 w-3" /> MortgageFlow
+          </span>
+          <h2 className="mt-5 text-3xl font-semibold leading-[1.05] tracking-tight sm:text-4xl md:text-5xl">
+            Your Mortgage Journey
+            <br />
+            Starts <span className="text-[#e9c46a]">Here.</span>
+          </h2>
+          <p className="mt-4 max-w-lg text-base leading-relaxed text-white/70">
+            Apply in minutes. Upload your documents, answer a few simple questions, and receive a
+            personalised mortgage assessment.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Link
+              to="/mortgage"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-[#e9c46a] px-6 text-sm font-semibold text-[#0b1436] transition-colors hover:bg-[#f0d488]"
+            >
+              Start My Application
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+            <Link
+              to="/mortgage"
+              className="inline-flex h-12 items-center justify-center rounded-lg border border-white/20 px-6 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              Learn More
+            </Link>
+          </div>
+        </div>
+        <div className="relative">
+          <div className="rounded-2xl bg-white p-6 text-[#0b1436] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0b1436]/60">
+                Personalised assessment
+              </p>
+              <span className="rounded-full bg-[#0b1436] px-2 py-0.5 text-[10px] font-semibold text-white">
+                Preview
+              </span>
+            </div>
+            <p className="mt-3 text-3xl font-semibold tracking-tight">€385,000</p>
+            <p className="text-sm text-[#0b1436]/60">Estimated maximum borrowing</p>
+            <div className="mt-5 space-y-3">
+              {[
+                { l: "Loan-to-Value", v: "72%", bar: 72, c: "bg-[#0b1436]" },
+                { l: "Deposit ready", v: "28%", bar: 28, c: "bg-[#e9c46a]" },
+                { l: "Affordability", v: "Strong", bar: 88, c: "bg-emerald-500" },
+              ].map((r) => (
+                <div key={r.l}>
+                  <div className="flex justify-between text-xs font-medium">
+                    <span className="text-[#0b1436]/70">{r.l}</span>
+                    <span>{r.v}</span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#0b1436]/8">
+                    <div className={cn("h-full rounded-full", r.c)} style={{ width: `${r.bar}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 flex items-center gap-2 rounded-xl bg-[#0b1436]/5 px-3 py-2.5 text-xs text-[#0b1436]/70">
+              <Landmark className="h-3.5 w-3.5" /> Regulated, secure, and audit-tracked.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function WelcomeCard({
+
   onSelect,
   onDrop,
 }: {
