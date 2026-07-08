@@ -155,7 +155,7 @@ function PassportIntakePage() {
     setPreviewUrl(URL.createObjectURL(f));
     setStatus("extracting");
     setExtracted(null);
-    setConfirmed({ fullName: false, dateOfBirth: false, address: false });
+    setConfirmed({ fullName: false, dateOfBirth: false, address: false, passportExpiry: false });
 
     try {
       const base64 = await fileToBase64(f);
@@ -163,12 +163,13 @@ function PassportIntakePage() {
         data: { fileBase64: base64, mimeType: f.type },
       })) as Extracted;
 
-      const anyFound = result.fullName || result.dateOfBirth;
+      const anyFound = result.fullName || result.dateOfBirth || result.passportExpiry;
       setExtracted(result);
       setForm({
         fullName: result.fullName ?? "",
         dateOfBirth: result.dateOfBirth ?? "",
         address: result.address ?? "",
+        passportExpiry: result.passportExpiry ?? "",
       });
       setStatus(anyFound ? "review" : "extract_failed");
       if (anyFound) toast.success("Passport analyzed. Please review the fields below.");
@@ -181,7 +182,8 @@ function PassportIntakePage() {
         fullName: null,
         dateOfBirth: null,
         address: null,
-        confidence: { fullName: 0, dateOfBirth: 0, address: 0 },
+        passportExpiry: null,
+        confidence: { fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
       });
       setStatus("extract_failed");
     }
@@ -204,6 +206,20 @@ function PassportIntakePage() {
 
     if (values.address && values.address.length > 500)
       errs.address = "Address is too long (max 500 characters).";
+
+    // Passport expiry — required, valid, and NOT expired
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (!values.passportExpiry) errs.passportExpiry = "Passport expiry date is required.";
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(values.passportExpiry))
+      errs.passportExpiry = "Use format YYYY-MM-DD.";
+    else {
+      const exp = new Date(values.passportExpiry);
+      if (Number.isNaN(exp.getTime())) errs.passportExpiry = "Invalid date.";
+      else if (values.passportExpiry < todayIso)
+        errs.passportExpiry = "This passport has expired and cannot be accepted.";
+      else if (values.dateOfBirth && values.passportExpiry <= values.dateOfBirth)
+        errs.passportExpiry = "Expiry date must be after date of birth.";
+    }
 
     // Confidence gates
     for (const field of Array.from(lowConfFields)) {
@@ -228,11 +244,13 @@ function PassportIntakePage() {
           fullName: form.fullName.trim(),
           dateOfBirth: form.dateOfBirth,
           address: form.address.trim() || null,
+          passportExpiry: form.passportExpiry,
           extracted: extracted ?? {
             fullName: null,
             dateOfBirth: null,
             address: null,
-            confidence: { fullName: 0, dateOfBirth: 0, address: 0 },
+            passportExpiry: null,
+            confidence: { fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
           },
         },
       })) as { id: string; submittedAt: string };
