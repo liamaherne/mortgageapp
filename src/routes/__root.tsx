@@ -77,14 +77,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Passport Intake — Back Office" },
+      {
+        name: "description",
+        content:
+          "Secure back-office workflow to upload a passport, auto-extract applicant details, and submit a verified application.",
+      },
+      { property: "og:title", content: "Passport Intake — Back Office" },
+      {
+        property: "og:description",
+        content:
+          "Upload a passport, auto-extract Full Name, Date of Birth, and Address, then review and submit.",
+      },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:card", content: "summary" },
     ],
     links: [
       {
