@@ -87,10 +87,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "Upload a passport, auto-extract Full Name, Date of Birth, and Address, then review and submit.",
+          "Secure back-office workflow to upload a passport, auto-extract applicant details, and submit a verified application.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Passport Intake — Back Office" },
+      { name: "twitter:description", content: "Secure back-office workflow to upload a passport, auto-extract applicant details, and submit a verified application." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d718b3e4-597c-4265-a1e8-e3efa0bd54fd/id-preview-dc0839fc--42e4aa24-e22f-44ec-ab88-2c87fa73cd4e.lovable.app-1783533024817.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d718b3e4-597c-4265-a1e8-e3efa0bd54fd/id-preview-dc0839fc--42e4aa24-e22f-44ec-ab88-2c87fa73cd4e.lovable.app-1783533024817.png" },
     ],
     links: [
       {

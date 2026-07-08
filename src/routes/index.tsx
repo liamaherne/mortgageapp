@@ -40,7 +40,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Upload a passport, auto-extract Full Name, Date of Birth, and Address, then review and submit.",
+          "Secure back-office workflow to upload a passport, auto-extract applicant details, and submit a verified application.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
