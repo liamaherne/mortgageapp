@@ -6,21 +6,29 @@ const ExtractInput = z.object({
   mimeType: z.string().min(3),
 });
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 const SubmitInput = z.object({
   fullName: z.string().trim().min(1).max(200),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+  dateOfBirth: z.string().regex(ISO_DATE, "Date must be YYYY-MM-DD"),
   address: z.string().trim().max(500).optional().nullable(),
+  passportExpiry: z.string().regex(ISO_DATE, "Expiry must be YYYY-MM-DD"),
   extracted: z.object({
     fullName: z.string().nullable(),
     dateOfBirth: z.string().nullable(),
     address: z.string().nullable(),
+    passportExpiry: z.string().nullable(),
     confidence: z.object({
       fullName: z.number(),
       dateOfBirth: z.number(),
       address: z.number(),
+      passportExpiry: z.number(),
     }),
   }),
-});
+}).refine(
+  (v) => new Date(v.passportExpiry) >= new Date(new Date().toISOString().slice(0, 10)),
+  { path: ["passportExpiry"], message: "Passport is expired." },
+);
 
 export const extractPassport = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => ExtractInput.parse(input))
@@ -31,13 +39,15 @@ export const extractPassport = createServerFn({ method: "POST" })
     const systemPrompt = `You are a passport OCR and document intelligence system. Extract the following fields from the passport document image provided. Return ONLY valid JSON matching this exact schema — no explanation, no code fences:
 
 {
-  "fullName": string | null,     // Full name as printed (given names + surname, in natural reading order)
-  "dateOfBirth": string | null,  // ISO date YYYY-MM-DD
-  "address": string | null,      // Address if visible on the document, else null
+  "fullName": string | null,        // Full name as printed (given names + surname, in natural reading order)
+  "dateOfBirth": string | null,     // ISO date YYYY-MM-DD
+  "address": string | null,         // Address if visible on the document, else null
+  "passportExpiry": string | null,  // Passport "Date of expiry" / "Expiration date", ISO YYYY-MM-DD
   "confidence": {
-    "fullName": number,          // 0.0 to 1.0
+    "fullName": number,             // 0.0 to 1.0
     "dateOfBirth": number,
-    "address": number
+    "address": number,
+    "passportExpiry": number
   }
 }
 
@@ -45,6 +55,7 @@ Guidelines:
 - If a field is not visible or unreadable, set the value to null and confidence to 0.
 - Confidence should reflect how certain you are the value is correct AND fully legible.
 - Passports usually do NOT contain an address — return null with confidence 0 in that case.
+- The passport expiry is labelled "Date of expiry", "Expiration date", or similar. Do not confuse it with the date of issue or date of birth.
 - Do not invent values. If unsure, mark low confidence.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -88,7 +99,13 @@ Guidelines:
       fullName: string | null;
       dateOfBirth: string | null;
       address: string | null;
-      confidence: { fullName: number; dateOfBirth: number; address: number };
+      passportExpiry: string | null;
+      confidence: {
+        fullName: number;
+        dateOfBirth: number;
+        address: number;
+        passportExpiry: number;
+      };
     };
     try {
       parsed = JSON.parse(content);
@@ -100,10 +117,12 @@ Guidelines:
       fullName: parsed.fullName ?? null,
       dateOfBirth: parsed.dateOfBirth ?? null,
       address: parsed.address ?? null,
+      passportExpiry: parsed.passportExpiry ?? null,
       confidence: {
         fullName: Number(parsed.confidence?.fullName ?? 0),
         dateOfBirth: Number(parsed.confidence?.dateOfBirth ?? 0),
         address: Number(parsed.confidence?.address ?? 0),
+        passportExpiry: Number(parsed.confidence?.passportExpiry ?? 0),
       },
     };
   });
@@ -139,6 +158,15 @@ export const submitApplication = createServerFn({ method: "POST" })
         confidence: data.extracted.confidence.address,
         timestamp: now,
       },
+      {
+        field: "passportExpiry",
+        source:
+          data.extracted.passportExpiry === data.passportExpiry ? "extracted" : "edited",
+        extractedValue: data.extracted.passportExpiry,
+        finalValue: data.passportExpiry,
+        confidence: data.extracted.confidence.passportExpiry,
+        timestamp: now,
+      },
     ];
 
     const { data: row, error } = await supabaseAdmin
@@ -147,6 +175,7 @@ export const submitApplication = createServerFn({ method: "POST" })
         full_name: data.fullName,
         date_of_birth: data.dateOfBirth,
         address: data.address ?? null,
+        passport_expiry: data.passportExpiry,
         extracted_data: data.extracted,
         audit_trail: audit,
       })

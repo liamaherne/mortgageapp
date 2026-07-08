@@ -53,10 +53,21 @@ type Extracted = {
   fullName: string | null;
   dateOfBirth: string | null;
   address: string | null;
-  confidence: { fullName: number; dateOfBirth: number; address: number };
+  passportExpiry: string | null;
+  confidence: {
+    fullName: number;
+    dateOfBirth: number;
+    address: number;
+    passportExpiry: number;
+  };
 };
 
-type FormState = { fullName: string; dateOfBirth: string; address: string };
+type FormState = {
+  fullName: string;
+  dateOfBirth: string;
+  address: string;
+  passportExpiry: string;
+};
 type Errors = Partial<Record<keyof FormState, string>>;
 
 function fileToBase64(file: File): Promise<string> {
@@ -82,12 +93,18 @@ function PassportIntakePage() {
     "idle" | "extracting" | "review" | "extract_failed" | "manual" | "submitting" | "submitted"
   >("idle");
   const [extracted, setExtracted] = useState<Extracted | null>(null);
-  const [form, setForm] = useState<FormState>({ fullName: "", dateOfBirth: "", address: "" });
+  const [form, setForm] = useState<FormState>({
+    fullName: "",
+    dateOfBirth: "",
+    address: "",
+    passportExpiry: "",
+  });
   const [errors, setErrors] = useState<Errors>({});
   const [confirmed, setConfirmed] = useState<Record<keyof FormState, boolean>>({
     fullName: false,
     dateOfBirth: false,
     address: false,
+    passportExpiry: false,
   });
   const [submittedId, setSubmittedId] = useState<string | null>(null);
 
@@ -96,6 +113,7 @@ function PassportIntakePage() {
     const s = new Set<keyof FormState>();
     if (extracted.confidence.fullName < LOW_CONFIDENCE) s.add("fullName");
     if (extracted.confidence.dateOfBirth < LOW_CONFIDENCE) s.add("dateOfBirth");
+    if (extracted.confidence.passportExpiry < LOW_CONFIDENCE) s.add("passportExpiry");
     // Only flag address if extractor claims to have found one with low confidence
     if (extracted.address && extracted.confidence.address < LOW_CONFIDENCE) s.add("address");
     return s;
@@ -111,9 +129,9 @@ function PassportIntakePage() {
     setPreviewUrl(null);
     setStatus("idle");
     setExtracted(null);
-    setForm({ fullName: "", dateOfBirth: "", address: "" });
+    setForm({ fullName: "", dateOfBirth: "", address: "", passportExpiry: "" });
     setErrors({});
-    setConfirmed({ fullName: false, dateOfBirth: false, address: false });
+    setConfirmed({ fullName: false, dateOfBirth: false, address: false, passportExpiry: false });
     setSubmittedId(null);
     if (inputRef.current) inputRef.current.value = "";
   }, [revokePreview]);
@@ -137,7 +155,7 @@ function PassportIntakePage() {
     setPreviewUrl(URL.createObjectURL(f));
     setStatus("extracting");
     setExtracted(null);
-    setConfirmed({ fullName: false, dateOfBirth: false, address: false });
+    setConfirmed({ fullName: false, dateOfBirth: false, address: false, passportExpiry: false });
 
     try {
       const base64 = await fileToBase64(f);
@@ -145,12 +163,13 @@ function PassportIntakePage() {
         data: { fileBase64: base64, mimeType: f.type },
       })) as Extracted;
 
-      const anyFound = result.fullName || result.dateOfBirth;
+      const anyFound = result.fullName || result.dateOfBirth || result.passportExpiry;
       setExtracted(result);
       setForm({
         fullName: result.fullName ?? "",
         dateOfBirth: result.dateOfBirth ?? "",
         address: result.address ?? "",
+        passportExpiry: result.passportExpiry ?? "",
       });
       setStatus(anyFound ? "review" : "extract_failed");
       if (anyFound) toast.success("Passport analyzed. Please review the fields below.");
@@ -163,7 +182,8 @@ function PassportIntakePage() {
         fullName: null,
         dateOfBirth: null,
         address: null,
-        confidence: { fullName: 0, dateOfBirth: 0, address: 0 },
+        passportExpiry: null,
+        confidence: { fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
       });
       setStatus("extract_failed");
     }
@@ -186,6 +206,20 @@ function PassportIntakePage() {
 
     if (values.address && values.address.length > 500)
       errs.address = "Address is too long (max 500 characters).";
+
+    // Passport expiry — required, valid, and NOT expired
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (!values.passportExpiry) errs.passportExpiry = "Passport expiry date is required.";
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(values.passportExpiry))
+      errs.passportExpiry = "Use format YYYY-MM-DD.";
+    else {
+      const exp = new Date(values.passportExpiry);
+      if (Number.isNaN(exp.getTime())) errs.passportExpiry = "Invalid date.";
+      else if (values.passportExpiry < todayIso)
+        errs.passportExpiry = "This passport has expired and cannot be accepted.";
+      else if (values.dateOfBirth && values.passportExpiry <= values.dateOfBirth)
+        errs.passportExpiry = "Expiry date must be after date of birth.";
+    }
 
     // Confidence gates
     for (const field of Array.from(lowConfFields)) {
@@ -210,11 +244,13 @@ function PassportIntakePage() {
           fullName: form.fullName.trim(),
           dateOfBirth: form.dateOfBirth,
           address: form.address.trim() || null,
+          passportExpiry: form.passportExpiry,
           extracted: extracted ?? {
             fullName: null,
             dateOfBirth: null,
             address: null,
-            confidence: { fullName: 0, dateOfBirth: 0, address: 0 },
+            passportExpiry: null,
+            confidence: { fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
           },
         },
       })) as { id: string; submittedAt: string };
@@ -536,6 +572,19 @@ function ReviewPanel({
             onConfirm={(v) => setConfirm("address", v)}
             extractedValue={extracted?.address}
             placeholder="Not typically present on passports — enter if applicable"
+          />
+          <Field
+            id="passportExpiry"
+            label="Passport Expiry Date"
+            type="date"
+            value={form.passportExpiry}
+            onChange={(v) => setField("passportExpiry", v)}
+            error={errors.passportExpiry}
+            confidence={extracted?.confidence.passportExpiry}
+            isLowConf={lowConfFields.has("passportExpiry")}
+            confirmed={confirmed.passportExpiry}
+            onConfirm={(v) => setConfirm("passportExpiry", v)}
+            extractedValue={extracted?.passportExpiry}
           />
         </fieldset>
 
