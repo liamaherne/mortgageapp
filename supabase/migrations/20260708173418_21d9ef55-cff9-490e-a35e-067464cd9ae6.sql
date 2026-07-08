@@ -1,0 +1,1 @@
+ALTER TABLE public.applications ADD COLUMN passport_expiry DATE;

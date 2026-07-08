@@ -22,6 +22,7 @@ export type Database = {
           extracted_data: Json
           full_name: string
           id: string
+          passport_expiry: string | null
           submitted_at: string
         }
         Insert: {
@@ -31,6 +32,7 @@ export type Database = {
           extracted_data?: Json
           full_name: string
           id?: string
+          passport_expiry?: string | null
           submitted_at?: string
         }
         Update: {
@@ -40,6 +42,7 @@ export type Database = {
           extracted_data?: Json
           full_name?: string
           id?: string
+          passport_expiry?: string | null
           submitted_at?: string
         }
         Relationships: []
