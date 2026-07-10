@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
+import { extractPassport, submitApplication } from "@/lib/passport.functions";
 import {
   ArrowLeft,
   ArrowRight,
@@ -133,6 +135,7 @@ const STEPS = [
   { id: 6, label: "Contact", icon: Phone },
   { id: 7, label: "Documents", icon: FileText },
   { id: 8, label: "Review", icon: CheckCircle2 },
+  { id: 9, label: "Passport", icon: ShieldCheck },
 ] as const;
 
 const STORAGE_KEY = "mortgageflow_draft_v1";
@@ -284,8 +287,14 @@ function MortgageFlowPage() {
               data={data}
               ltv={ltv}
               onBack={() => setStep(7)}
-              onSubmit={submit}
+              onSubmit={() => setStep(9)}
               update={update}
+            />
+          )}
+          {step === 9 && (
+            <StepPassport
+              onBack={() => setStep(8)}
+              onComplete={submit}
             />
           )}
         </div>
@@ -375,7 +384,7 @@ function ProgressRail({ step }: { step: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <ol className="mt-5 hidden gap-2 md:grid md:grid-cols-8">
+      <ol className="mt-5 hidden gap-2 md:grid md:grid-cols-9">
         {STEPS.map((s) => {
           const active = s.id === step;
           const done = s.id < step;
@@ -1664,7 +1673,7 @@ function StepReview({
       <StepNav
         onBack={onBack}
         onNext={onSubmit}
-        nextLabel="Submit Application"
+        nextLabel="Continue to passport verification"
         nextDisabled={!data.agreed}
       />
     </div>
@@ -1820,6 +1829,372 @@ function SuccessScreen({
           </div>
         </div>
       </main>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Step 9 — Passport intake (back-office verification)
+// -----------------------------------------------------------------------------
+
+const PASSPORT_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+const PASSPORT_MAX_MB = 10;
+const PASSPORT_LOW_CONF = 0.7;
+
+type PassportExtracted = {
+  fullName: string | null;
+  dateOfBirth: string | null;
+  address: string | null;
+  passportExpiry: string | null;
+  confidence: {
+    fullName: number;
+    dateOfBirth: number;
+    address: number;
+    passportExpiry: number;
+  };
+};
+
+type PassportForm = {
+  fullName: string;
+  dateOfBirth: string;
+  address: string;
+  passportExpiry: string;
+};
+
+function passportFileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1] ?? "");
+    };
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function StepPassport({
+  onBack,
+  onComplete,
+}: {
+  onBack: () => void;
+  onComplete: () => void;
+}) {
+  const runExtract = useServerFn(extractPassport);
+  const runSubmit = useServerFn(submitApplication);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<
+    "idle" | "extracting" | "review" | "extract_failed" | "submitting"
+  >("idle");
+  const [extracted, setExtracted] = useState<PassportExtracted | null>(null);
+  const [form, setForm] = useState<PassportForm>({
+    fullName: "",
+    dateOfBirth: "",
+    address: "",
+    passportExpiry: "",
+  });
+  const [errors, setErrors] = useState<Partial<Record<keyof PassportForm, string>>>({});
+
+  const lowConf = useMemo(() => {
+    const s = new Set<keyof PassportForm>();
+    if (!extracted) return s;
+    if (extracted.confidence.fullName < PASSPORT_LOW_CONF) s.add("fullName");
+    if (extracted.confidence.dateOfBirth < PASSPORT_LOW_CONF) s.add("dateOfBirth");
+    if (extracted.confidence.passportExpiry < PASSPORT_LOW_CONF) s.add("passportExpiry");
+    if (extracted.address && extracted.confidence.address < PASSPORT_LOW_CONF) s.add("address");
+    return s;
+  }, [extracted]);
+
+  const handleFile = async (f: File) => {
+    if (!PASSPORT_ACCEPTED.includes(f.type)) {
+      toast.error("Unsupported file type. Please upload a PDF, JPG, JPEG, or PNG.");
+      return;
+    }
+    if (f.size > PASSPORT_MAX_MB * 1024 * 1024) {
+      toast.error(`File exceeds ${PASSPORT_MAX_MB}MB limit.`);
+      return;
+    }
+    setFile(f);
+    setStatus("extracting");
+    try {
+      const base64 = await passportFileToBase64(f);
+      const result = (await runExtract({
+        data: { fileBase64: base64, mimeType: f.type },
+      })) as PassportExtracted;
+      setExtracted(result);
+      setForm({
+        fullName: result.fullName ?? "",
+        dateOfBirth: result.dateOfBirth ?? "",
+        address: result.address ?? "",
+        passportExpiry: result.passportExpiry ?? "",
+      });
+      const anyFound = result.fullName || result.dateOfBirth || result.passportExpiry;
+      setStatus(anyFound ? "review" : "extract_failed");
+      if (anyFound) toast.success("Passport analysed. Please review the fields.");
+      else toast.warning("We couldn't extract details. Please enter them manually.");
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Extraction failed.";
+      toast.error(msg);
+      setExtracted({
+        fullName: null,
+        dateOfBirth: null,
+        address: null,
+        passportExpiry: null,
+        confidence: { fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
+      });
+      setStatus("extract_failed");
+    }
+  };
+
+  const validate = (): boolean => {
+    const errs: Partial<Record<keyof PassportForm, string>> = {};
+    if (!form.fullName.trim()) errs.fullName = "Full name is required.";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth))
+      errs.dateOfBirth = "Use format YYYY-MM-DD.";
+    else if (new Date(form.dateOfBirth) > new Date())
+      errs.dateOfBirth = "Date of birth cannot be in the future.";
+    const today = new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.passportExpiry))
+      errs.passportExpiry = "Use format YYYY-MM-DD.";
+    else if (form.passportExpiry < today)
+      errs.passportExpiry = "This passport has expired and cannot be accepted.";
+    else if (form.dateOfBirth && form.passportExpiry <= form.dateOfBirth)
+      errs.passportExpiry = "Expiry date must be after date of birth.";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const submitPassport = async () => {
+    if (!extracted) return;
+    if (!validate()) {
+      toast.error("Please fix the highlighted fields.");
+      return;
+    }
+    setStatus("submitting");
+    try {
+      await runSubmit({
+        data: {
+          fullName: form.fullName.trim(),
+          dateOfBirth: form.dateOfBirth,
+          address: form.address.trim() || null,
+          passportExpiry: form.passportExpiry,
+          extracted,
+        },
+      });
+      toast.success("Passport verified. Finalising your application…");
+      onComplete();
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Submission failed.";
+      toast.error(msg);
+      setStatus("review");
+    }
+  };
+
+  return (
+    <div>
+      <StepHeader
+        title="Passport verification"
+        subtitle="Upload your passport so we can verify your identity and finalise your application."
+      />
+
+      {status === "idle" && (
+        <div>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleFile(f);
+            }}
+            className="flex w-full flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#0b1436]/15 bg-[#f6f7fb] p-10 text-center transition-colors hover:border-[#0b1436]/40 hover:bg-[#0b1436]/5"
+          >
+            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#0b1436] text-[#e9c46a]">
+              <Upload className="h-6 w-6" />
+            </span>
+            <span className="text-base font-semibold text-[#0b1436]">
+              Upload passport document
+            </span>
+            <span className="text-xs text-[#0b1436]/60">
+              PDF, JPG, JPEG or PNG · up to {PASSPORT_MAX_MB}MB
+            </span>
+          </button>
+          <div className="mt-4 flex items-start gap-2 rounded-xl bg-[#e9c46a]/10 px-4 py-3 text-xs text-[#0b1436]/75">
+            <ShieldCheck className="mt-0.5 h-4 w-4 text-emerald-600" />
+            Your document is processed for identity verification only and is not retained
+            beyond submission.
+          </div>
+        </div>
+      )}
+
+      {status === "extracting" && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#0b1436]/10 bg-white p-10 text-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#0b1436]/20 border-t-[#0b1436]" />
+          <p className="text-sm font-medium text-[#0b1436]">Analysing your passport…</p>
+          <p className="text-xs text-[#0b1436]/60">This usually takes a few seconds.</p>
+        </div>
+      )}
+
+      {(status === "review" || status === "extract_failed" || status === "submitting") && (
+        <div className="space-y-5">
+          {status === "extract_failed" && (
+            <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+              <AlertTitle>Couldn't read the document automatically</AlertTitle>
+              <AlertDescription>
+                Please enter your details manually below, or try uploading a clearer image.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid gap-4">
+            <PassportField
+              id="pf-fullName"
+              label="Full name"
+              value={form.fullName}
+              onChange={(v) => setForm({ ...form, fullName: v })}
+              error={errors.fullName}
+              lowConf={lowConf.has("fullName")}
+              extractedValue={extracted?.fullName ?? null}
+              confidence={extracted?.confidence.fullName ?? 0}
+            />
+            <PassportField
+              id="pf-dob"
+              label="Date of birth"
+              type="date"
+              value={form.dateOfBirth}
+              onChange={(v) => setForm({ ...form, dateOfBirth: v })}
+              error={errors.dateOfBirth}
+              lowConf={lowConf.has("dateOfBirth")}
+              extractedValue={extracted?.dateOfBirth ?? null}
+              confidence={extracted?.confidence.dateOfBirth ?? 0}
+            />
+            <PassportField
+              id="pf-expiry"
+              label="Passport expiry"
+              type="date"
+              value={form.passportExpiry}
+              onChange={(v) => setForm({ ...form, passportExpiry: v })}
+              error={errors.passportExpiry}
+              lowConf={lowConf.has("passportExpiry")}
+              extractedValue={extracted?.passportExpiry ?? null}
+              confidence={extracted?.confidence.passportExpiry ?? 0}
+            />
+            <PassportField
+              id="pf-address"
+              label="Address (optional)"
+              value={form.address}
+              onChange={(v) => setForm({ ...form, address: v })}
+              error={errors.address}
+              lowConf={lowConf.has("address")}
+              extractedValue={extracted?.address ?? null}
+              confidence={extracted?.confidence.address ?? 0}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl bg-[#0b1436]/5 px-4 py-3 text-xs text-[#0b1436]/70">
+            <span className="flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5" />
+              {file?.name ?? "Manual entry"}
+            </span>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="font-semibold text-[#0b1436] hover:underline"
+            >
+              Replace document
+            </button>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept={PASSPORT_ACCEPTED.join(",")}
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+        }}
+      />
+
+      <StepNav
+        onBack={onBack}
+        onNext={submitPassport}
+        nextLabel={status === "submitting" ? "Submitting…" : "Submit Application"}
+        nextDisabled={status === "idle" || status === "extracting" || status === "submitting"}
+        submitting={status === "submitting"}
+      />
+    </div>
+  );
+}
+
+function PassportField({
+  id,
+  label,
+  value,
+  onChange,
+  error,
+  lowConf,
+  extractedValue,
+  confidence,
+  type = "text",
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  lowConf?: boolean;
+  extractedValue: string | null;
+  confidence: number;
+  type?: string;
+}) {
+  const edited = extractedValue !== null && value !== extractedValue;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor={id} className="text-sm font-medium text-[#0b1436]">
+          {label}
+        </Label>
+        <div className="flex items-center gap-1.5">
+          {extractedValue !== null && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "gap-1 border-[#0b1436]/15 text-[10px] font-semibold uppercase tracking-wider",
+                edited ? "text-amber-700" : "text-emerald-700",
+              )}
+            >
+              {edited ? "Edited" : "Auto-extracted"}
+              {confidence > 0 && <span className="opacity-60">· {Math.round(confidence * 100)}%</span>}
+            </Badge>
+          )}
+        </div>
+      </div>
+      <Input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "h-12 rounded-xl border-[#0b1436]/12 text-[#0b1436] shadow-sm focus-visible:border-[#0b1436] focus-visible:ring-[#0b1436]/20",
+          error && "border-red-400 focus-visible:border-red-500 focus-visible:ring-red-200",
+          lowConf && !error && "border-amber-400",
+        )}
+      />
+      {error ? (
+        <p className="text-xs text-red-600">{error}</p>
+      ) : lowConf ? (
+        <p className="text-xs text-amber-700">
+          Low confidence — please verify this value carefully.
+        </p>
+      ) : null}
     </div>
   );
 }
