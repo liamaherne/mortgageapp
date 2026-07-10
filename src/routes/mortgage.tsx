@@ -287,8 +287,14 @@ function MortgageFlowPage() {
               data={data}
               ltv={ltv}
               onBack={() => setStep(7)}
-              onSubmit={submit}
+              onSubmit={() => setStep(9)}
               update={update}
+            />
+          )}
+          {step === 9 && (
+            <StepPassport
+              onBack={() => setStep(8)}
+              onComplete={submit}
             />
           )}
         </div>
