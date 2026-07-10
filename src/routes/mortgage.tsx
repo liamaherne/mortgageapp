@@ -1247,9 +1247,9 @@ function StepResidency({
 }) {
   return (
     <div>
-      <StepHeader title="Tax residency" subtitle="Where are you tax resident?" />
+      <StepHeader title="Ireland tax residency" subtitle="Confirm your Ireland tax residency status." />
 
-      <QuestionBlock label="Are you a UK resident for tax purposes?">
+      <QuestionBlock label="Are you an Ireland resident for tax purposes?">
         <div className="grid gap-3 sm:grid-cols-2">
           <OptionCard
             active={data.ukResident === "yes"}
