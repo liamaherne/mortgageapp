@@ -1673,7 +1673,7 @@ function StepReview({
       <StepNav
         onBack={onBack}
         onNext={onSubmit}
-        nextLabel="Submit Application"
+        nextLabel="Continue to passport verification"
         nextDisabled={!data.agreed}
       />
     </div>
