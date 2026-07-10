@@ -1642,7 +1642,7 @@ function StepReview({
                 ? data.creditHistory.map(labelize).join(", ")
                 : "—",
             ],
-            ["UK tax resident", labelize(data.ukResident)],
+            ["Ireland tax resident", labelize(data.ukResident)],
           ]}
         />
         <ReviewCard
