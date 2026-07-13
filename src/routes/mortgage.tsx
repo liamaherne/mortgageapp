@@ -2239,3 +2239,95 @@ function PassportField({
     </div>
   );
 }
+
+function DocTypeCard({
+  value,
+  onChange,
+  extractedType,
+  confidence,
+}: {
+  value: DocumentType;
+  onChange: (v: DocumentType) => void;
+  extractedType: DocumentType;
+  confidence: number;
+}) {
+  const options: DocumentType[] = ["passport", "driver_license", "national_id"];
+  const pct = Math.round(confidence * 100);
+  return (
+    <div className="rounded-2xl border border-[#0b1436]/10 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0b1436]/60">
+            Document classification
+          </p>
+          <p className="text-sm font-semibold text-[#0b1436]">
+            Detected: {DOC_TYPE_LABELS[extractedType]}
+          </p>
+        </div>
+        <Badge
+          className={cn(
+            "border-transparent",
+            confidence >= 0.7
+              ? "bg-emerald-100 text-emerald-800"
+              : confidence > 0
+                ? "bg-amber-100 text-amber-800"
+                : "bg-[#0b1436]/10 text-[#0b1436]/70",
+          )}
+        >
+          {confidence > 0 ? `${pct}% confidence` : "Unclassified"}
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={cn(
+              "rounded-xl border px-3 py-2.5 text-left text-sm transition-colors",
+              value === opt
+                ? "border-[#0b1436] bg-[#0b1436] text-white"
+                : "border-[#0b1436]/15 bg-white text-[#0b1436] hover:border-[#0b1436]/40",
+            )}
+          >
+            <span className="block text-[11px] font-semibold uppercase tracking-wider opacity-70">
+              {opt === extractedType ? "AI detected" : "Override"}
+            </span>
+            <span className="mt-0.5 block font-semibold">{DOC_TYPE_LABELS[opt]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExpiryFlag({ expiry }: { expiry: string }) {
+  const status = getExpiryStatus(expiry);
+  const tone =
+    status.tone === "expired"
+      ? "border-red-300 bg-red-50 text-red-800"
+      : status.tone === "soon"
+        ? "border-amber-300 bg-amber-50 text-amber-900"
+        : status.tone === "valid"
+          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+          : "border-[#0b1436]/15 bg-[#0b1436]/5 text-[#0b1436]/70";
+  const label =
+    status.tone === "expired"
+      ? "Expired"
+      : status.tone === "soon"
+        ? "Expiring soon"
+        : status.tone === "valid"
+          ? "Valid"
+          : "Unknown";
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <div className={cn("flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-3 text-sm", tone)}>
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4" />
+        <span className="font-semibold">Expiry status: {label}</span>
+        <span className="opacity-80">— {status.label}</span>
+      </div>
+      <span className="text-xs opacity-70">Compared against today ({today})</span>
+    </div>
+  );
+}
