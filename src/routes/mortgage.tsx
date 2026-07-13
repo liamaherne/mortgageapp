@@ -1841,12 +1841,23 @@ const PASSPORT_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/
 const PASSPORT_MAX_MB = 10;
 const PASSPORT_LOW_CONF = 0.7;
 
+type DocumentType = "passport" | "driver_license" | "national_id" | "unknown";
+
+const DOC_TYPE_LABELS: Record<DocumentType, string> = {
+  passport: "Passport",
+  driver_license: "Driver's licence",
+  national_id: "National ID",
+  unknown: "Unrecognised document",
+};
+
 type PassportExtracted = {
+  documentType: DocumentType;
   fullName: string | null;
   dateOfBirth: string | null;
   address: string | null;
   passportExpiry: string | null;
   confidence: {
+    documentType: number;
     fullName: number;
     dateOfBirth: number;
     address: number;
@@ -1855,6 +1866,7 @@ type PassportExtracted = {
 };
 
 type PassportForm = {
+  documentType: DocumentType;
   fullName: string;
   dateOfBirth: string;
   address: string;
@@ -1871,6 +1883,19 @@ function passportFileToBase64(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Could not read file"));
     reader.readAsDataURL(file);
   });
+}
+
+type ExpiryStatus = { tone: "expired" | "soon" | "valid" | "unknown"; label: string; days: number | null };
+
+function getExpiryStatus(iso: string): ExpiryStatus {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return { tone: "unknown", label: "Not provided", days: null };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(iso + "T00:00:00");
+  const days = Math.round((exp.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return { tone: "expired", label: `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`, days };
+  if (days <= 90) return { tone: "soon", label: `Expires in ${days} day${days === 1 ? "" : "s"}`, days };
+  return { tone: "valid", label: `Valid — expires in ${days} days`, days };
 }
 
 function StepPassport({
@@ -1890,6 +1915,7 @@ function StepPassport({
   >("idle");
   const [extracted, setExtracted] = useState<PassportExtracted | null>(null);
   const [form, setForm] = useState<PassportForm>({
+    documentType: "unknown",
     fullName: "",
     dateOfBirth: "",
     address: "",
