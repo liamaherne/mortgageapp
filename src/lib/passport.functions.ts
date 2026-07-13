@@ -41,15 +41,17 @@ export const extractPassport = createServerFn({ method: "POST" })
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI service is not configured.");
 
-    const systemPrompt = `You are a passport OCR and document intelligence system. Extract the following fields from the passport document image provided. Return ONLY valid JSON matching this exact schema — no explanation, no code fences:
+    const systemPrompt = `You are an ID document OCR and classification system. Analyse the uploaded identity document and return ONLY valid JSON matching this exact schema — no explanation, no code fences:
 
 {
+  "documentType": "passport" | "driver_license" | "national_id" | "unknown",
   "fullName": string | null,        // Full name as printed (given names + surname, in natural reading order)
   "dateOfBirth": string | null,     // ISO date YYYY-MM-DD
   "address": string | null,         // Address if visible on the document, else null
-  "passportExpiry": string | null,  // Passport "Date of expiry" / "Expiration date", ISO YYYY-MM-DD
+  "passportExpiry": string | null,  // Document expiry / "Date of expiry" / "Expiration date", ISO YYYY-MM-DD
   "confidence": {
-    "fullName": number,             // 0.0 to 1.0
+    "documentType": number,         // 0.0 to 1.0
+    "fullName": number,
     "dateOfBirth": number,
     "address": number,
     "passportExpiry": number
@@ -57,10 +59,11 @@ export const extractPassport = createServerFn({ method: "POST" })
 }
 
 Guidelines:
+- Classify the document as one of: "passport" (booklet-style travel document), "driver_license" (driving licence / permit card), "national_id" (state-issued national identity card / residence permit), or "unknown" if it doesn't match any of these.
 - If a field is not visible or unreadable, set the value to null and confidence to 0.
 - Confidence should reflect how certain you are the value is correct AND fully legible.
-- Passports usually do NOT contain an address — return null with confidence 0 in that case.
-- The passport expiry is labelled "Date of expiry", "Expiration date", or similar. Do not confuse it with the date of issue or date of birth.
+- Passports usually do NOT contain an address — return null with confidence 0 in that case. Driver licences and national ID cards often do.
+- The expiry date is labelled "Date of expiry", "Expiration date", "Expires", "Valid until", or similar. Do not confuse it with the date of issue or date of birth.
 - Do not invent values. If unsure, mark low confidence.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
