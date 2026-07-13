@@ -79,7 +79,7 @@ Guidelines:
           {
             role: "user",
             content: [
-              { type: "text", text: "Extract passport fields from this document." },
+              { type: "text", text: "Classify and extract fields from this identity document." },
               {
                 type: "image_url",
                 image_url: {
