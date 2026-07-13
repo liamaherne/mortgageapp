@@ -1966,11 +1966,12 @@ function StepPassport({
       const msg = e instanceof Error ? e.message : "Extraction failed.";
       toast.error(msg);
       setExtracted({
+        documentType: "unknown",
         fullName: null,
         dateOfBirth: null,
         address: null,
         passportExpiry: null,
-        confidence: { fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
+        confidence: { documentType: 0, fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
       });
       setStatus("extract_failed");
     }
