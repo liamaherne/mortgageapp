@@ -104,11 +104,13 @@ Guidelines:
     const payload = await response.json();
     const content: string = payload.choices?.[0]?.message?.content ?? "";
     let parsed: {
+      documentType?: string | null;
       fullName: string | null;
       dateOfBirth: string | null;
       address: string | null;
       passportExpiry: string | null;
       confidence: {
+        documentType?: number;
         fullName: number;
         dateOfBirth: number;
         address: number;
@@ -121,12 +123,19 @@ Guidelines:
       throw new Error("Extraction failed. The document may be unreadable — please enter details manually.");
     }
 
+    const rawType = (parsed.documentType ?? "unknown").toString().toLowerCase().replace(/[\s-]/g, "_");
+    const documentType = (DOC_TYPES as readonly string[]).includes(rawType)
+      ? (rawType as (typeof DOC_TYPES)[number])
+      : "unknown";
+
     return {
+      documentType,
       fullName: parsed.fullName ?? null,
       dateOfBirth: parsed.dateOfBirth ?? null,
       address: parsed.address ?? null,
       passportExpiry: parsed.passportExpiry ?? null,
       confidence: {
+        documentType: Number(parsed.confidence?.documentType ?? 0),
         fullName: Number(parsed.confidence?.fullName ?? 0),
         dateOfBirth: Number(parsed.confidence?.dateOfBirth ?? 0),
         address: Number(parsed.confidence?.address ?? 0),
