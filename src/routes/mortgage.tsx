@@ -2009,10 +2009,11 @@ function StepPassport({
           dateOfBirth: form.dateOfBirth,
           address: form.address.trim() || null,
           passportExpiry: form.passportExpiry,
+          documentType: form.documentType,
           extracted,
         },
       });
-      toast.success("Passport verified. Finalising your application…");
+      toast.success("Identity verified. Finalising your application…");
       onComplete();
     } catch (e) {
       console.error(e);
