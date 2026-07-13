@@ -2067,7 +2067,7 @@ function StepPassport({
       {status === "extracting" && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#0b1436]/10 bg-white p-10 text-center">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#0b1436]/20 border-t-[#0b1436]" />
-          <p className="text-sm font-medium text-[#0b1436]">Analysing your passport…</p>
+          <p className="text-sm font-medium text-[#0b1436]">Analysing your document…</p>
           <p className="text-xs text-[#0b1436]/60">This usually takes a few seconds.</p>
         </div>
       )}
