@@ -2026,8 +2026,8 @@ function StepPassport({
   return (
     <div>
       <StepHeader
-        title="Passport verification"
-        subtitle="Upload your passport so we can verify your identity and finalise your application."
+        title="Identity verification"
+        subtitle="Upload your passport, driver's licence, or national ID so we can verify your identity and finalise your application."
       />
 
       {status === "idle" && (
