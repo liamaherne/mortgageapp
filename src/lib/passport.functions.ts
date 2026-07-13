@@ -183,8 +183,23 @@ export const submitApplication = createServerFn({ method: "POST" })
         finalValue: data.passportExpiry,
         confidence: data.extracted.confidence.passportExpiry,
         timestamp: now,
+      {
+        field: "documentType",
+        source:
+          (data.extracted.documentType ?? "unknown") === (data.documentType ?? "unknown")
+            ? "extracted"
+            : "edited",
+        extractedValue: data.extracted.documentType ?? null,
+        finalValue: data.documentType ?? data.extracted.documentType ?? "unknown",
+        confidence: data.extracted.confidence.documentType ?? 0,
+        timestamp: now,
       },
     ];
+
+    const extractedWithType = {
+      ...data.extracted,
+      documentType: data.documentType ?? data.extracted.documentType ?? "unknown",
+    };
 
     const { data: row, error } = await supabaseAdmin
       .from("applications")
