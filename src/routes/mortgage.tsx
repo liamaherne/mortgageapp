@@ -1988,7 +1988,7 @@ function StepPassport({
     if (!/^\d{4}-\d{2}-\d{2}$/.test(form.passportExpiry))
       errs.passportExpiry = "Use format YYYY-MM-DD.";
     else if (form.passportExpiry < today)
-      errs.passportExpiry = "This passport has expired and cannot be accepted.";
+      errs.passportExpiry = "This ID document has expired and cannot be accepted.";
     else if (form.dateOfBirth && form.passportExpiry <= form.dateOfBirth)
       errs.passportExpiry = "Expiry date must be after date of birth.";
     setErrors(errs);
