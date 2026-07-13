@@ -183,6 +183,7 @@ export const submitApplication = createServerFn({ method: "POST" })
         finalValue: data.passportExpiry,
         confidence: data.extracted.confidence.passportExpiry,
         timestamp: now,
+      },
       {
         field: "documentType",
         source:
