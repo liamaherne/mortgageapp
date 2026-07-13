@@ -1951,6 +1951,7 @@ function StepPassport({
       })) as PassportExtracted;
       setExtracted(result);
       setForm({
+        documentType: result.documentType ?? "unknown",
         fullName: result.fullName ?? "",
         dateOfBirth: result.dateOfBirth ?? "",
         address: result.address ?? "",
