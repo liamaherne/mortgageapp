@@ -8,26 +8,31 @@ const ExtractInput = z.object({
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+const DOC_TYPES = ["passport", "driver_license", "national_id", "unknown"] as const;
+
 const SubmitInput = z.object({
   fullName: z.string().trim().min(1).max(200),
   dateOfBirth: z.string().regex(ISO_DATE, "Date must be YYYY-MM-DD"),
   address: z.string().trim().max(500).optional().nullable(),
   passportExpiry: z.string().regex(ISO_DATE, "Expiry must be YYYY-MM-DD"),
+  documentType: z.enum(DOC_TYPES).optional(),
   extracted: z.object({
     fullName: z.string().nullable(),
     dateOfBirth: z.string().nullable(),
     address: z.string().nullable(),
     passportExpiry: z.string().nullable(),
+    documentType: z.enum(DOC_TYPES).optional(),
     confidence: z.object({
       fullName: z.number(),
       dateOfBirth: z.number(),
       address: z.number(),
       passportExpiry: z.number(),
+      documentType: z.number().optional(),
     }),
   }),
 }).refine(
   (v) => new Date(v.passportExpiry) >= new Date(new Date().toISOString().slice(0, 10)),
-  { path: ["passportExpiry"], message: "Passport is expired." },
+  { path: ["passportExpiry"], message: "ID document is expired." },
 );
 
 export const extractPassport = createServerFn({ method: "POST" })
