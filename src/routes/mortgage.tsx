@@ -2083,6 +2083,15 @@ function StepPassport({
             </Alert>
           )}
 
+          <DocTypeCard
+            value={form.documentType}
+            onChange={(v) => setForm({ ...form, documentType: v })}
+            extractedType={extracted?.documentType ?? "unknown"}
+            confidence={extracted?.confidence.documentType ?? 0}
+          />
+
+          <ExpiryFlag expiry={form.passportExpiry} />
+
           <div className="grid gap-4">
             <PassportField
               id="pf-fullName"
@@ -2107,7 +2116,7 @@ function StepPassport({
             />
             <PassportField
               id="pf-expiry"
-              label="Passport expiry"
+              label={`${DOC_TYPE_LABELS[form.documentType]} expiry`}
               type="date"
               value={form.passportExpiry}
               onChange={(v) => setForm({ ...form, passportExpiry: v })}
