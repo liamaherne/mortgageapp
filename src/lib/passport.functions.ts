@@ -8,26 +8,31 @@ const ExtractInput = z.object({
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+const DOC_TYPES = ["passport", "driver_license", "national_id", "unknown"] as const;
+
 const SubmitInput = z.object({
   fullName: z.string().trim().min(1).max(200),
   dateOfBirth: z.string().regex(ISO_DATE, "Date must be YYYY-MM-DD"),
   address: z.string().trim().max(500).optional().nullable(),
   passportExpiry: z.string().regex(ISO_DATE, "Expiry must be YYYY-MM-DD"),
+  documentType: z.enum(DOC_TYPES).optional(),
   extracted: z.object({
     fullName: z.string().nullable(),
     dateOfBirth: z.string().nullable(),
     address: z.string().nullable(),
     passportExpiry: z.string().nullable(),
+    documentType: z.enum(DOC_TYPES).optional(),
     confidence: z.object({
       fullName: z.number(),
       dateOfBirth: z.number(),
       address: z.number(),
       passportExpiry: z.number(),
+      documentType: z.number().optional(),
     }),
   }),
 }).refine(
   (v) => new Date(v.passportExpiry) >= new Date(new Date().toISOString().slice(0, 10)),
-  { path: ["passportExpiry"], message: "Passport is expired." },
+  { path: ["passportExpiry"], message: "ID document is expired." },
 );
 
 export const extractPassport = createServerFn({ method: "POST" })
@@ -36,15 +41,17 @@ export const extractPassport = createServerFn({ method: "POST" })
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI service is not configured.");
 
-    const systemPrompt = `You are a passport OCR and document intelligence system. Extract the following fields from the passport document image provided. Return ONLY valid JSON matching this exact schema — no explanation, no code fences:
+    const systemPrompt = `You are an ID document OCR and classification system. Analyse the uploaded identity document and return ONLY valid JSON matching this exact schema — no explanation, no code fences:
 
 {
+  "documentType": "passport" | "driver_license" | "national_id" | "unknown",
   "fullName": string | null,        // Full name as printed (given names + surname, in natural reading order)
   "dateOfBirth": string | null,     // ISO date YYYY-MM-DD
   "address": string | null,         // Address if visible on the document, else null
-  "passportExpiry": string | null,  // Passport "Date of expiry" / "Expiration date", ISO YYYY-MM-DD
+  "passportExpiry": string | null,  // Document expiry / "Date of expiry" / "Expiration date", ISO YYYY-MM-DD
   "confidence": {
-    "fullName": number,             // 0.0 to 1.0
+    "documentType": number,         // 0.0 to 1.0
+    "fullName": number,
     "dateOfBirth": number,
     "address": number,
     "passportExpiry": number
@@ -52,10 +59,11 @@ export const extractPassport = createServerFn({ method: "POST" })
 }
 
 Guidelines:
+- Classify the document as one of: "passport" (booklet-style travel document), "driver_license" (driving licence / permit card), "national_id" (state-issued national identity card / residence permit), or "unknown" if it doesn't match any of these.
 - If a field is not visible or unreadable, set the value to null and confidence to 0.
 - Confidence should reflect how certain you are the value is correct AND fully legible.
-- Passports usually do NOT contain an address — return null with confidence 0 in that case.
-- The passport expiry is labelled "Date of expiry", "Expiration date", or similar. Do not confuse it with the date of issue or date of birth.
+- Passports usually do NOT contain an address — return null with confidence 0 in that case. Driver licences and national ID cards often do.
+- The expiry date is labelled "Date of expiry", "Expiration date", "Expires", "Valid until", or similar. Do not confuse it with the date of issue or date of birth.
 - Do not invent values. If unsure, mark low confidence.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -71,7 +79,7 @@ Guidelines:
           {
             role: "user",
             content: [
-              { type: "text", text: "Extract passport fields from this document." },
+              { type: "text", text: "Classify and extract fields from this identity document." },
               {
                 type: "image_url",
                 image_url: {
@@ -96,11 +104,13 @@ Guidelines:
     const payload = await response.json();
     const content: string = payload.choices?.[0]?.message?.content ?? "";
     let parsed: {
+      documentType?: string | null;
       fullName: string | null;
       dateOfBirth: string | null;
       address: string | null;
       passportExpiry: string | null;
       confidence: {
+        documentType?: number;
         fullName: number;
         dateOfBirth: number;
         address: number;
@@ -113,12 +123,19 @@ Guidelines:
       throw new Error("Extraction failed. The document may be unreadable — please enter details manually.");
     }
 
+    const rawType = (parsed.documentType ?? "unknown").toString().toLowerCase().replace(/[\s-]/g, "_");
+    const documentType = (DOC_TYPES as readonly string[]).includes(rawType)
+      ? (rawType as (typeof DOC_TYPES)[number])
+      : "unknown";
+
     return {
+      documentType,
       fullName: parsed.fullName ?? null,
       dateOfBirth: parsed.dateOfBirth ?? null,
       address: parsed.address ?? null,
       passportExpiry: parsed.passportExpiry ?? null,
       confidence: {
+        documentType: Number(parsed.confidence?.documentType ?? 0),
         fullName: Number(parsed.confidence?.fullName ?? 0),
         dateOfBirth: Number(parsed.confidence?.dateOfBirth ?? 0),
         address: Number(parsed.confidence?.address ?? 0),
@@ -167,7 +184,23 @@ export const submitApplication = createServerFn({ method: "POST" })
         confidence: data.extracted.confidence.passportExpiry,
         timestamp: now,
       },
+      {
+        field: "documentType",
+        source:
+          (data.extracted.documentType ?? "unknown") === (data.documentType ?? "unknown")
+            ? "extracted"
+            : "edited",
+        extractedValue: data.extracted.documentType ?? null,
+        finalValue: data.documentType ?? data.extracted.documentType ?? "unknown",
+        confidence: data.extracted.confidence.documentType ?? 0,
+        timestamp: now,
+      },
     ];
+
+    const extractedWithType = {
+      ...data.extracted,
+      documentType: data.documentType ?? data.extracted.documentType ?? "unknown",
+    };
 
     const { data: row, error } = await supabaseAdmin
       .from("applications")
@@ -176,7 +209,7 @@ export const submitApplication = createServerFn({ method: "POST" })
         date_of_birth: data.dateOfBirth,
         address: data.address ?? null,
         passport_expiry: data.passportExpiry,
-        extracted_data: data.extracted,
+        extracted_data: extractedWithType,
         audit_trail: audit,
       })
       .select("id, submitted_at")

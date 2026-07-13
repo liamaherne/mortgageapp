@@ -1841,12 +1841,23 @@ const PASSPORT_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/
 const PASSPORT_MAX_MB = 10;
 const PASSPORT_LOW_CONF = 0.7;
 
+type DocumentType = "passport" | "driver_license" | "national_id" | "unknown";
+
+const DOC_TYPE_LABELS: Record<DocumentType, string> = {
+  passport: "Passport",
+  driver_license: "Driver's licence",
+  national_id: "National ID",
+  unknown: "Unrecognised document",
+};
+
 type PassportExtracted = {
+  documentType: DocumentType;
   fullName: string | null;
   dateOfBirth: string | null;
   address: string | null;
   passportExpiry: string | null;
   confidence: {
+    documentType: number;
     fullName: number;
     dateOfBirth: number;
     address: number;
@@ -1855,6 +1866,7 @@ type PassportExtracted = {
 };
 
 type PassportForm = {
+  documentType: DocumentType;
   fullName: string;
   dateOfBirth: string;
   address: string;
@@ -1871,6 +1883,19 @@ function passportFileToBase64(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Could not read file"));
     reader.readAsDataURL(file);
   });
+}
+
+type ExpiryStatus = { tone: "expired" | "soon" | "valid" | "unknown"; label: string; days: number | null };
+
+function getExpiryStatus(iso: string): ExpiryStatus {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return { tone: "unknown", label: "Not provided", days: null };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(iso + "T00:00:00");
+  const days = Math.round((exp.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return { tone: "expired", label: `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`, days };
+  if (days <= 90) return { tone: "soon", label: `Expires in ${days} day${days === 1 ? "" : "s"}`, days };
+  return { tone: "valid", label: `Valid — expires in ${days} days`, days };
 }
 
 function StepPassport({
@@ -1890,6 +1915,7 @@ function StepPassport({
   >("idle");
   const [extracted, setExtracted] = useState<PassportExtracted | null>(null);
   const [form, setForm] = useState<PassportForm>({
+    documentType: "unknown",
     fullName: "",
     dateOfBirth: "",
     address: "",
@@ -1925,6 +1951,7 @@ function StepPassport({
       })) as PassportExtracted;
       setExtracted(result);
       setForm({
+        documentType: result.documentType ?? "unknown",
         fullName: result.fullName ?? "",
         dateOfBirth: result.dateOfBirth ?? "",
         address: result.address ?? "",
@@ -1939,11 +1966,12 @@ function StepPassport({
       const msg = e instanceof Error ? e.message : "Extraction failed.";
       toast.error(msg);
       setExtracted({
+        documentType: "unknown",
         fullName: null,
         dateOfBirth: null,
         address: null,
         passportExpiry: null,
-        confidence: { fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
+        confidence: { documentType: 0, fullName: 0, dateOfBirth: 0, address: 0, passportExpiry: 0 },
       });
       setStatus("extract_failed");
     }
@@ -1960,7 +1988,7 @@ function StepPassport({
     if (!/^\d{4}-\d{2}-\d{2}$/.test(form.passportExpiry))
       errs.passportExpiry = "Use format YYYY-MM-DD.";
     else if (form.passportExpiry < today)
-      errs.passportExpiry = "This passport has expired and cannot be accepted.";
+      errs.passportExpiry = "This ID document has expired and cannot be accepted.";
     else if (form.dateOfBirth && form.passportExpiry <= form.dateOfBirth)
       errs.passportExpiry = "Expiry date must be after date of birth.";
     setErrors(errs);
@@ -1981,10 +2009,11 @@ function StepPassport({
           dateOfBirth: form.dateOfBirth,
           address: form.address.trim() || null,
           passportExpiry: form.passportExpiry,
+          documentType: form.documentType,
           extracted,
         },
       });
-      toast.success("Passport verified. Finalising your application…");
+      toast.success("Identity verified. Finalising your application…");
       onComplete();
     } catch (e) {
       console.error(e);
@@ -1997,8 +2026,8 @@ function StepPassport({
   return (
     <div>
       <StepHeader
-        title="Passport verification"
-        subtitle="Upload your passport so we can verify your identity and finalise your application."
+        title="Identity verification"
+        subtitle="Upload your passport, driver's licence, or national ID so we can verify your identity and finalise your application."
       />
 
       {status === "idle" && (
@@ -2018,7 +2047,10 @@ function StepPassport({
               <Upload className="h-6 w-6" />
             </span>
             <span className="text-base font-semibold text-[#0b1436]">
-              Upload passport document
+              Upload ID document
+            </span>
+            <span className="text-xs text-[#0b1436]/60">
+              Passport, driver's licence, or national ID
             </span>
             <span className="text-xs text-[#0b1436]/60">
               PDF, JPG, JPEG or PNG · up to {PASSPORT_MAX_MB}MB
@@ -2035,7 +2067,7 @@ function StepPassport({
       {status === "extracting" && (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#0b1436]/10 bg-white p-10 text-center">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#0b1436]/20 border-t-[#0b1436]" />
-          <p className="text-sm font-medium text-[#0b1436]">Analysing your passport…</p>
+          <p className="text-sm font-medium text-[#0b1436]">Analysing your document…</p>
           <p className="text-xs text-[#0b1436]/60">This usually takes a few seconds.</p>
         </div>
       )}
@@ -2050,6 +2082,15 @@ function StepPassport({
               </AlertDescription>
             </Alert>
           )}
+
+          <DocTypeCard
+            value={form.documentType}
+            onChange={(v) => setForm({ ...form, documentType: v })}
+            extractedType={extracted?.documentType ?? "unknown"}
+            confidence={extracted?.confidence.documentType ?? 0}
+          />
+
+          <ExpiryFlag expiry={form.passportExpiry} />
 
           <div className="grid gap-4">
             <PassportField
@@ -2075,7 +2116,7 @@ function StepPassport({
             />
             <PassportField
               id="pf-expiry"
-              label="Passport expiry"
+              label={`${DOC_TYPE_LABELS[form.documentType]} expiry`}
               type="date"
               value={form.passportExpiry}
               onChange={(v) => setForm({ ...form, passportExpiry: v })}
@@ -2195,6 +2236,98 @@ function PassportField({
           Low confidence — please verify this value carefully.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function DocTypeCard({
+  value,
+  onChange,
+  extractedType,
+  confidence,
+}: {
+  value: DocumentType;
+  onChange: (v: DocumentType) => void;
+  extractedType: DocumentType;
+  confidence: number;
+}) {
+  const options: DocumentType[] = ["passport", "driver_license", "national_id"];
+  const pct = Math.round(confidence * 100);
+  return (
+    <div className="rounded-2xl border border-[#0b1436]/10 bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0b1436]/60">
+            Document classification
+          </p>
+          <p className="text-sm font-semibold text-[#0b1436]">
+            Detected: {DOC_TYPE_LABELS[extractedType]}
+          </p>
+        </div>
+        <Badge
+          className={cn(
+            "border-transparent",
+            confidence >= 0.7
+              ? "bg-emerald-100 text-emerald-800"
+              : confidence > 0
+                ? "bg-amber-100 text-amber-800"
+                : "bg-[#0b1436]/10 text-[#0b1436]/70",
+          )}
+        >
+          {confidence > 0 ? `${pct}% confidence` : "Unclassified"}
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={cn(
+              "rounded-xl border px-3 py-2.5 text-left text-sm transition-colors",
+              value === opt
+                ? "border-[#0b1436] bg-[#0b1436] text-white"
+                : "border-[#0b1436]/15 bg-white text-[#0b1436] hover:border-[#0b1436]/40",
+            )}
+          >
+            <span className="block text-[11px] font-semibold uppercase tracking-wider opacity-70">
+              {opt === extractedType ? "AI detected" : "Override"}
+            </span>
+            <span className="mt-0.5 block font-semibold">{DOC_TYPE_LABELS[opt]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExpiryFlag({ expiry }: { expiry: string }) {
+  const status = getExpiryStatus(expiry);
+  const tone =
+    status.tone === "expired"
+      ? "border-red-300 bg-red-50 text-red-800"
+      : status.tone === "soon"
+        ? "border-amber-300 bg-amber-50 text-amber-900"
+        : status.tone === "valid"
+          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+          : "border-[#0b1436]/15 bg-[#0b1436]/5 text-[#0b1436]/70";
+  const label =
+    status.tone === "expired"
+      ? "Expired"
+      : status.tone === "soon"
+        ? "Expiring soon"
+        : status.tone === "valid"
+          ? "Valid"
+          : "Unknown";
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <div className={cn("flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-3 text-sm", tone)}>
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4" />
+        <span className="font-semibold">Expiry status: {label}</span>
+        <span className="opacity-80">— {status.label}</span>
+      </div>
+      <span className="text-xs opacity-70">Compared against today ({today})</span>
     </div>
   );
 }
