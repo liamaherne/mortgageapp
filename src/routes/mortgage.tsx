@@ -2047,7 +2047,10 @@ function StepPassport({
               <Upload className="h-6 w-6" />
             </span>
             <span className="text-base font-semibold text-[#0b1436]">
-              Upload passport document
+              Upload ID document
+            </span>
+            <span className="text-xs text-[#0b1436]/60">
+              Passport, driver's licence, or national ID
             </span>
             <span className="text-xs text-[#0b1436]/60">
               PDF, JPG, JPEG or PNG · up to {PASSPORT_MAX_MB}MB
