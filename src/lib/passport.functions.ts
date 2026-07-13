@@ -209,7 +209,7 @@ export const submitApplication = createServerFn({ method: "POST" })
         date_of_birth: data.dateOfBirth,
         address: data.address ?? null,
         passport_expiry: data.passportExpiry,
-        extracted_data: data.extracted,
+        extracted_data: extractedWithType,
         audit_trail: audit,
       })
       .select("id, submitted_at")
