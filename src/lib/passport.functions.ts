@@ -6,6 +6,11 @@ const ExtractInput = z.object({
   mimeType: z.string().min(3),
 });
 
+const BankExtractInput = z.object({
+  fileBase64: z.string().min(10),
+  mimeType: z.string().min(3),
+});
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const DOC_TYPES = ["passport", "driver_license", "national_id", "unknown"] as const;
