@@ -391,7 +391,7 @@ function ProgressRail({ step }: { step: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <ol className="mt-5 hidden gap-2 md:grid md:grid-cols-9">
+      <ol className="mt-5 hidden gap-2 md:grid md:grid-cols-10">
         {STEPS.map((s) => {
           const active = s.id === step;
           const done = s.id < step;
