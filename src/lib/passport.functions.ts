@@ -6,6 +6,11 @@ const ExtractInput = z.object({
   mimeType: z.string().min(3),
 });
 
+const BankExtractInput = z.object({
+  fileBase64: z.string().min(10),
+  mimeType: z.string().min(3),
+});
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const DOC_TYPES = ["passport", "driver_license", "national_id", "unknown"] as const;
@@ -221,4 +226,105 @@ export const submitApplication = createServerFn({ method: "POST" })
     }
 
     return { id: row.id, submittedAt: row.submitted_at, audit };
+  });
+
+export const extractBankStatement = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => BankExtractInput.parse(input))
+  .handler(async ({ data }) => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("AI service is not configured.");
+
+    const systemPrompt = `You are a bank statement OCR system. Analyse the uploaded bank statement and return ONLY valid JSON matching this exact schema — no explanation, no code fences:
+
+{
+  "bankName": string | null,             // Full bank name as printed on the statement
+  "iban": string | null,                 // IBAN with no spaces, uppercase
+  "bic": string | null,                  // BIC/SWIFT code, uppercase
+  "accountHolderName": string | null,    // Primary account holder full name
+  "accountHolderAddress": string | null, // Account holder's postal address
+  "statementDate": string | null,        // Most recent statement period end date or statement date, ISO YYYY-MM-DD
+  "confidence": {
+    "bankName": number,
+    "iban": number,
+    "bic": number,
+    "accountHolderName": number,
+    "accountHolderAddress": number,
+    "statementDate": number
+  }
+}
+
+Guidelines:
+- Confidence is 0.0 to 1.0.
+- If a field is unreadable or absent, set to null and confidence to 0.
+- Strip spaces from IBAN and BIC. IBAN is 15-34 alphanumeric characters starting with a 2-letter country code.
+- statementDate is the LATEST date on the statement (period end or statement issue date), not the account open date.
+- Do not invent values.`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Lovable-API-Key": key,
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Extract fields from this bank statement." },
+              {
+                type: "image_url",
+                image_url: { url: `data:${data.mimeType};base64,${data.fileBase64}` },
+              },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("AI gateway error", response.status, errText);
+      if (response.status === 429) throw new Error("Rate limit reached. Please try again in a moment.");
+      if (response.status === 402) throw new Error("AI credits exhausted. Please add credits to continue.");
+      throw new Error("Failed to analyze bank statement. Please try again.");
+    }
+
+    const payload = await response.json();
+    const content: string = payload.choices?.[0]?.message?.content ?? "";
+    let parsed: {
+      bankName: string | null;
+      iban: string | null;
+      bic: string | null;
+      accountHolderName: string | null;
+      accountHolderAddress: string | null;
+      statementDate: string | null;
+      confidence: Record<string, number>;
+    };
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      throw new Error("Extraction failed. The statement may be unreadable — please enter details manually.");
+    }
+
+    const clean = (v: string | null) => (v ? v.replace(/\s+/g, "").toUpperCase() : null);
+    return {
+      bankName: parsed.bankName ?? null,
+      iban: clean(parsed.iban),
+      bic: clean(parsed.bic),
+      accountHolderName: parsed.accountHolderName ?? null,
+      accountHolderAddress: parsed.accountHolderAddress ?? null,
+      statementDate: parsed.statementDate ?? null,
+      confidence: {
+        bankName: Number(parsed.confidence?.bankName ?? 0),
+        iban: Number(parsed.confidence?.iban ?? 0),
+        bic: Number(parsed.confidence?.bic ?? 0),
+        accountHolderName: Number(parsed.confidence?.accountHolderName ?? 0),
+        accountHolderAddress: Number(parsed.confidence?.accountHolderAddress ?? 0),
+        statementDate: Number(parsed.confidence?.statementDate ?? 0),
+      },
+    };
   });

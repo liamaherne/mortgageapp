@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { extractPassport, submitApplication } from "@/lib/passport.functions";
+import { extractPassport, submitApplication, extractBankStatement } from "@/lib/passport.functions";
 import {
   ArrowLeft,
   ArrowRight,
@@ -136,6 +136,7 @@ const STEPS = [
   { id: 7, label: "Documents", icon: FileText },
   { id: 8, label: "Review", icon: CheckCircle2 },
   { id: 9, label: "Passport", icon: ShieldCheck },
+  { id: 10, label: "Bank statement", icon: Building2 },
 ] as const;
 
 const STORAGE_KEY = "mortgageflow_draft_v1";
@@ -294,6 +295,12 @@ function MortgageFlowPage() {
           {step === 9 && (
             <StepPassport
               onBack={() => setStep(8)}
+              onComplete={() => setStep(10)}
+            />
+          )}
+          {step === 10 && (
+            <StepBankStatement
+              onBack={() => setStep(9)}
               onComplete={submit}
             />
           )}
@@ -384,7 +391,7 @@ function ProgressRail({ step }: { step: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <ol className="mt-5 hidden gap-2 md:grid md:grid-cols-9">
+      <ol className="mt-5 hidden gap-2 md:grid md:grid-cols-10">
         {STEPS.map((s) => {
           const active = s.id === step;
           const done = s.id < step;
@@ -2167,7 +2174,7 @@ function StepPassport({
       <StepNav
         onBack={onBack}
         onNext={submitPassport}
-        nextLabel={status === "submitting" ? "Submitting…" : "Submit Application"}
+        nextLabel={status === "submitting" ? "Submitting…" : "Continue to bank statement"}
         nextDisabled={status === "idle" || status === "extracting" || status === "submitting"}
         submitting={status === "submitting"}
       />
@@ -2328,6 +2335,441 @@ function ExpiryFlag({ expiry }: { expiry: string }) {
         <span className="opacity-80">— {status.label}</span>
       </div>
       <span className="text-xs opacity-70">Compared against today ({today})</span>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Step 10 — Bank statement intake
+// -----------------------------------------------------------------------------
+
+const BANK_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+const BANK_MAX_MB = 10;
+
+type BankExtracted = {
+  bankName: string | null;
+  iban: string | null;
+  bic: string | null;
+  accountHolderName: string | null;
+  accountHolderAddress: string | null;
+  statementDate: string | null;
+  confidence: {
+    bankName: number;
+    iban: number;
+    bic: number;
+    accountHolderName: number;
+    accountHolderAddress: number;
+    statementDate: number;
+  };
+};
+
+type BankForm = {
+  bankName: string;
+  iban: string;
+  bic: string;
+  accountHolderName: string;
+  accountHolderAddress: string;
+  statementDate: string;
+};
+
+// Country → { bbanLength, accountNumberFromBBAN(bban) }
+// Domestic account number position within the BBAN varies by country.
+// For unlisted countries we fall back to the trailing digits of the BBAN.
+const IBAN_COUNTRY_ACCOUNT: Record<string, (bban: string) => string> = {
+  IE: (b) => b.slice(10, 18),  // 4 bank + 6 sort + 8 account
+  GB: (b) => b.slice(10, 18),  // 4 bank + 6 sort + 8 account
+  DE: (b) => b.slice(8, 18),   // 8 bank + 10 account
+  FR: (b) => b.slice(9, 20),   // 5 bank + 5 branch + 11 account
+  ES: (b) => b.slice(12, 22),  // 4 bank + 4 branch + 2 check + 10 account
+  NL: (b) => b.slice(4, 14),   // 4 bank + 10 account
+  IT: (b) => b.slice(11, 23),  // 1 check + 5 bank + 5 branch + 12 account
+  BE: (b) => b.slice(3, 10),   // 3 bank + 7 account
+  PT: (b) => b.slice(8, 19),   // 4 bank + 4 branch + 11 account
+  AT: (b) => b.slice(5, 16),   // 5 bank + 11 account
+  LU: (b) => b.slice(3, 16),   // 3 bank + 13 account
+  US: (b) => b,                // Not IBAN natively; passthrough
+};
+
+function deriveAccountNumber(iban: string): { country: string; bban: string; account: string } | null {
+  const clean = iban.replace(/\s+/g, "").toUpperCase();
+  if (clean.length < 15 || clean.length > 34) return null;
+  const country = clean.slice(0, 2);
+  if (!/^[A-Z]{2}$/.test(country)) return null;
+  const bban = clean.slice(4);
+  const extractor = IBAN_COUNTRY_ACCOUNT[country];
+  const account = extractor ? extractor(bban) : bban.slice(-8);
+  return { country, bban, account };
+}
+
+// ISO 13616 mod-97 IBAN check
+function isValidIban(iban: string): boolean {
+  const s = iban.replace(/\s+/g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(s) || s.length < 15 || s.length > 34) return false;
+  const rearranged = s.slice(4) + s.slice(0, 4);
+  const converted = rearranged.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  // Compute mod 97 in chunks (BigInt not needed)
+  let remainder = 0;
+  for (let i = 0; i < converted.length; i += 7) {
+    const chunk = String(remainder) + converted.slice(i, i + 7);
+    remainder = Number(chunk) % 97;
+  }
+  return remainder === 1;
+}
+
+type StatementFreshness = { tone: "valid" | "stale" | "future" | "unknown"; label: string; days: number | null };
+
+function getStatementFreshness(iso: string): StatementFreshness {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return { tone: "unknown", label: "No statement date detected", days: null };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(iso + "T00:00:00");
+  const days = Math.round((today.getTime() - d.getTime()) / 86400000);
+  if (days < 0) return { tone: "future", label: `Dated ${Math.abs(days)} day(s) in the future`, days };
+  const sixMonthsAgo = new Date(today);
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  if (d < sixMonthsAgo) return { tone: "stale", label: `Older than 6 months (${days} days old)`, days };
+  return { tone: "valid", label: `Within the last 6 months (${days} day${days === 1 ? "" : "s"} old)`, days };
+}
+
+function StepBankStatement({
+  onBack,
+  onComplete,
+}: {
+  onBack: () => void;
+  onComplete: () => void;
+}) {
+  const runExtract = useServerFn(extractBankStatement);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "extracting" | "review" | "extract_failed">("idle");
+  const [extracted, setExtracted] = useState<BankExtracted | null>(null);
+  const [form, setForm] = useState<BankForm>({
+    bankName: "",
+    iban: "",
+    bic: "",
+    accountHolderName: "",
+    accountHolderAddress: "",
+    statementDate: "",
+  });
+
+  const readFileAsBase64 = (f: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(((reader.result as string) ?? "").split(",")[1] ?? "");
+      reader.onerror = () => reject(new Error("Could not read file"));
+      reader.readAsDataURL(f);
+    });
+
+  const handleFile = async (f: File) => {
+    if (!BANK_ACCEPTED.includes(f.type)) {
+      toast.error("Unsupported file. Upload PDF, JPG, JPEG, or PNG.");
+      return;
+    }
+    if (f.size > BANK_MAX_MB * 1024 * 1024) {
+      toast.error(`File exceeds ${BANK_MAX_MB}MB limit.`);
+      return;
+    }
+    setFile(f);
+    setStatus("extracting");
+    try {
+      const base64 = await readFileAsBase64(f);
+      const result = (await runExtract({
+        data: { fileBase64: base64, mimeType: f.type },
+      })) as BankExtracted;
+      setExtracted(result);
+      setForm({
+        bankName: result.bankName ?? "",
+        iban: result.iban ?? "",
+        bic: result.bic ?? "",
+        accountHolderName: result.accountHolderName ?? "",
+        accountHolderAddress: result.accountHolderAddress ?? "",
+        statementDate: result.statementDate ?? "",
+      });
+      const anyFound = result.iban || result.bankName || result.accountHolderName;
+      setStatus(anyFound ? "review" : "extract_failed");
+      if (anyFound) toast.success("Statement analysed. Please review the fields.");
+      else toast.warning("We couldn't extract details. Please enter them manually.");
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Extraction failed.");
+      setStatus("extract_failed");
+    }
+  };
+
+  const derived = useMemo(() => deriveAccountNumber(form.iban), [form.iban]);
+  const ibanValid = form.iban ? isValidIban(form.iban) : false;
+  const freshness = getStatementFreshness(form.statementDate);
+  const canSubmit =
+    status === "review" &&
+    ibanValid &&
+    form.bankName.trim() &&
+    form.bic.trim() &&
+    form.accountHolderName.trim() &&
+    freshness.tone === "valid";
+
+  return (
+    <div>
+      <StepHeader
+        title="Bank statement"
+        subtitle="Upload a recent bank statement so we can verify your account details."
+      />
+
+      {status === "idle" && (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files?.[0];
+            if (f) handleFile(f);
+          }}
+          className="flex w-full flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#0b1436]/15 bg-[#f6f7fb] p-10 text-center transition-colors hover:border-[#0b1436]/40 hover:bg-[#0b1436]/5"
+        >
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#0b1436] text-[#e9c46a]">
+            <Upload className="h-6 w-6" />
+          </span>
+          <span className="text-base font-semibold text-[#0b1436]">Upload bank statement</span>
+          <span className="text-xs text-[#0b1436]/60">Statement must be from the last 6 months</span>
+          <span className="text-xs text-[#0b1436]/60">
+            PDF, JPG, JPEG or PNG · up to {BANK_MAX_MB}MB
+          </span>
+        </button>
+      )}
+
+      {status === "extracting" && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#0b1436]/10 bg-white p-10 text-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#0b1436]/20 border-t-[#0b1436]" />
+          <p className="text-sm font-medium text-[#0b1436]">Analysing your statement…</p>
+          <p className="text-xs text-[#0b1436]/60">This usually takes a few seconds.</p>
+        </div>
+      )}
+
+      {(status === "review" || status === "extract_failed") && (
+        <div className="space-y-5">
+          {status === "extract_failed" && (
+            <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+              <AlertTitle>Couldn't read the statement automatically</AlertTitle>
+              <AlertDescription>
+                Please enter the details manually below, or upload a clearer file.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <StatementFreshnessFlag freshness={freshness} statementDate={form.statementDate} />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <PassportField
+              id="bs-bank"
+              label="Bank name"
+              value={form.bankName}
+              onChange={(v) => setForm({ ...form, bankName: v })}
+              extractedValue={extracted?.bankName ?? null}
+              confidence={extracted?.confidence.bankName ?? 0}
+            />
+            <PassportField
+              id="bs-holder"
+              label="Account holder name"
+              value={form.accountHolderName}
+              onChange={(v) => setForm({ ...form, accountHolderName: v })}
+              extractedValue={extracted?.accountHolderName ?? null}
+              confidence={extracted?.confidence.accountHolderName ?? 0}
+            />
+            <PassportField
+              id="bs-iban"
+              label="IBAN"
+              value={form.iban}
+              onChange={(v) => setForm({ ...form, iban: v.replace(/\s+/g, "").toUpperCase() })}
+              error={form.iban && !ibanValid ? "IBAN failed checksum validation." : undefined}
+              extractedValue={extracted?.iban ?? null}
+              confidence={extracted?.confidence.iban ?? 0}
+            />
+            <PassportField
+              id="bs-bic"
+              label="BIC / SWIFT"
+              value={form.bic}
+              onChange={(v) => setForm({ ...form, bic: v.replace(/\s+/g, "").toUpperCase() })}
+              extractedValue={extracted?.bic ?? null}
+              confidence={extracted?.confidence.bic ?? 0}
+            />
+            <div className="sm:col-span-2">
+              <PassportField
+                id="bs-address"
+                label="Account holder address"
+                value={form.accountHolderAddress}
+                onChange={(v) => setForm({ ...form, accountHolderAddress: v })}
+                extractedValue={extracted?.accountHolderAddress ?? null}
+                confidence={extracted?.confidence.accountHolderAddress ?? 0}
+              />
+            </div>
+            <PassportField
+              id="bs-date"
+              label="Statement date"
+              type="date"
+              value={form.statementDate}
+              onChange={(v) => setForm({ ...form, statementDate: v })}
+              extractedValue={extracted?.statementDate ?? null}
+              confidence={extracted?.confidence.statementDate ?? 0}
+            />
+          </div>
+
+          <AccountNumberCard iban={form.iban} ibanValid={ibanValid} derived={derived} />
+
+          <div className="flex items-center justify-between rounded-xl bg-[#0b1436]/5 px-4 py-3 text-xs text-[#0b1436]/70">
+            <span className="flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5" />
+              {file?.name ?? "Manual entry"}
+            </span>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="font-semibold text-[#0b1436] hover:underline"
+            >
+              Replace statement
+            </button>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept={BANK_ACCEPTED.join(",")}
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+        }}
+      />
+
+      <StepNav
+        onBack={onBack}
+        onNext={() => {
+          if (!canSubmit) {
+            toast.error("Please resolve highlighted issues before finishing.");
+            return;
+          }
+          toast.success("Bank statement verified. Finalising your application…");
+          onComplete();
+        }}
+        nextLabel="Finish Application"
+        nextDisabled={status === "idle" || status === "extracting" || !canSubmit}
+      />
+    </div>
+  );
+}
+
+function StatementFreshnessFlag({
+  freshness,
+  statementDate,
+}: {
+  freshness: StatementFreshness;
+  statementDate: string;
+}) {
+  const tone =
+    freshness.tone === "valid"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+      : freshness.tone === "stale"
+        ? "border-red-300 bg-red-50 text-red-800"
+        : freshness.tone === "future"
+          ? "border-amber-300 bg-amber-50 text-amber-900"
+          : "border-[#0b1436]/15 bg-[#0b1436]/5 text-[#0b1436]/70";
+  const label =
+    freshness.tone === "valid"
+      ? "Recent statement"
+      : freshness.tone === "stale"
+        ? "Statement too old"
+        : freshness.tone === "future"
+          ? "Invalid date"
+          : "Unknown";
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <div className={cn("flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-3 text-sm", tone)}>
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4" />
+        <span className="font-semibold">6-month check: {label}</span>
+        <span className="opacity-80">— {freshness.label}</span>
+      </div>
+      <span className="text-xs opacity-70">
+        Statement {statementDate || "—"} · today {today}
+      </span>
+    </div>
+  );
+}
+
+function AccountNumberCard({
+  iban,
+  ibanValid,
+  derived,
+}: {
+  iban: string;
+  ibanValid: boolean;
+  derived: ReturnType<typeof deriveAccountNumber>;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#0b1436]/10 bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#0b1436]/60">
+            Derived from IBAN
+          </p>
+          <p className="text-sm font-semibold text-[#0b1436]">
+            Domestic bank account number
+          </p>
+        </div>
+        <Badge
+          className={cn(
+            "border-transparent",
+            iban && ibanValid
+              ? "bg-emerald-100 text-emerald-800"
+              : iban
+                ? "bg-red-100 text-red-800"
+                : "bg-[#0b1436]/10 text-[#0b1436]/70",
+          )}
+        >
+          {iban ? (ibanValid ? "IBAN valid" : "IBAN invalid") : "Awaiting IBAN"}
+        </Badge>
+      </div>
+      {derived && ibanValid ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <DerivedField label="Country" value={derived.country} />
+          <DerivedField label="BBAN" value={derived.bban} mono />
+          <DerivedField label="Account number" value={derived.account} mono highlight />
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-[#0b1436]/60">
+          Enter a valid IBAN to derive the domestic account number.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DerivedField({
+  label,
+  value,
+  mono,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border px-3 py-2.5",
+        highlight ? "border-[#e9c46a] bg-[#e9c46a]/10" : "border-[#0b1436]/10 bg-[#f6f7fb]",
+      )}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-[#0b1436]/55">
+        {label}
+      </p>
+      <p className={cn("mt-0.5 break-all text-sm font-semibold text-[#0b1436]", mono && "font-mono")}>
+        {value || "—"}
+      </p>
     </div>
   );
 }
