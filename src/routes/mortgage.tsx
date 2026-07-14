@@ -2174,7 +2174,7 @@ function StepPassport({
       <StepNav
         onBack={onBack}
         onNext={submitPassport}
-        nextLabel={status === "submitting" ? "Submitting…" : "Submit Application"}
+        nextLabel={status === "submitting" ? "Submitting…" : "Continue to bank statement"}
         nextDisabled={status === "idle" || status === "extracting" || status === "submitting"}
         submitting={status === "submitting"}
       />
