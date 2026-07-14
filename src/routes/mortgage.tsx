@@ -136,6 +136,7 @@ const STEPS = [
   { id: 7, label: "Documents", icon: FileText },
   { id: 8, label: "Review", icon: CheckCircle2 },
   { id: 9, label: "Passport", icon: ShieldCheck },
+  { id: 10, label: "Bank statement", icon: Building2 },
 ] as const;
 
 const STORAGE_KEY = "mortgageflow_draft_v1";
