@@ -110,12 +110,6 @@ const EMPTY: FormData = {
   mobile: "",
   email: "",
   marketingOptIn: false,
-  identityDoc: null,
-  addressDoc: null,
-  extractedFullName: "",
-  extractedDob: "",
-  extractedAddress: "",
-  extractionConfidence: 0,
   agreed: false,
 };
 
