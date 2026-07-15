@@ -1064,49 +1064,6 @@ function StepEmployment({
         </AlertDescription>
       </Alert>
 
-      <QuestionBlock label="Upload bank statements">
-        <DropZone
-          multiple
-          hint="Recent 3 months preferred · PDF, JPG, PNG"
-          onFiles={addFiles}
-        />
-        {data.bankStatements.length > 0 && (
-          <ul className="mt-3 space-y-2">
-            {data.bankStatements.map((f, i) => (
-              <li
-                key={i}
-                className="flex items-center justify-between rounded-xl border border-[#0b1436]/10 bg-white px-4 py-2.5 text-sm"
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <FileText className="h-4 w-4 shrink-0 text-[#0b1436]/60" />
-                  <span className="truncate font-medium">{f.name}</span>
-                  <span className="shrink-0 text-xs text-[#0b1436]/50">
-                    {(f.size / 1024).toFixed(0)} KB
-                  </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                    <CheckCircle2 className="h-3 w-3" /> Uploaded
-                  </span>
-                  <button
-                    onClick={() =>
-                      update(
-                        "bankStatements",
-                        data.bankStatements.filter((_, idx) => idx !== i),
-                      )
-                    }
-                    className="text-[#0b1436]/40 hover:text-[#0b1436]"
-                    aria-label="Remove file"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </QuestionBlock>
-
       <StepNav onBack={onBack} onNext={onNext} nextDisabled={!canContinue} />
     </div>
   );
