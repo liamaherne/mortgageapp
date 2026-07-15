@@ -262,31 +262,23 @@ function MortgageFlowPage() {
             />
           )}
           {step === 7 && (
-            <StepDocuments
-              data={data}
-              update={update}
-              onBack={() => setStep(6)}
-              onNext={() => setStep(8)}
-            />
-          )}
-          {step === 8 && (
             <StepReview
               data={data}
               ltv={ltv}
-              onBack={() => setStep(7)}
-              onSubmit={() => setStep(9)}
+              onBack={() => setStep(6)}
+              onSubmit={() => setStep(8)}
               update={update}
             />
           )}
-          {step === 9 && (
+          {step === 8 && (
             <StepPassport
-              onBack={() => setStep(8)}
-              onComplete={() => setStep(10)}
+              onBack={() => setStep(7)}
+              onComplete={() => setStep(9)}
             />
           )}
-          {step === 10 && (
+          {step === 9 && (
             <StepBankStatement
-              onBack={() => setStep(9)}
+              onBack={() => setStep(8)}
               onComplete={submit}
             />
           )}
