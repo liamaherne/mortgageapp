@@ -1550,7 +1550,7 @@ function SuccessScreen({
 }
 
 // -----------------------------------------------------------------------------
-// Step 9 — Passport intake (back-office verification)
+// Step 8 — Passport intake (back-office verification)
 // -----------------------------------------------------------------------------
 
 const PASSPORT_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
@@ -2049,7 +2049,7 @@ function ExpiryFlag({ expiry }: { expiry: string }) {
 }
 
 // -----------------------------------------------------------------------------
-// Step 10 — Bank statement intake
+// Step 9 — Bank statement intake
 // -----------------------------------------------------------------------------
 
 const BANK_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
