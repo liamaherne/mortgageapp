@@ -90,13 +90,6 @@ type FormData = {
   email: string;
   marketingOptIn: boolean;
   // Step 7
-  identityDoc: { name: string; size: number } | null;
-  addressDoc: { name: string; size: number } | null;
-  extractedFullName: string;
-  extractedDob: string;
-  extractedAddress: string;
-  extractionConfidence: number;
-  // Step 8
   agreed: boolean;
 };
 
