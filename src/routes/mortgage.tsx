@@ -1370,13 +1370,10 @@ function StepReview({
           ]}
         />
         <ReviewCard
-          title="Contact & identity"
+          title="Contact"
           rows={[
             ["Mobile", data.mobile || "—"],
             ["Email", data.email || "—"],
-            ["Full name", data.extractedFullName || "—"],
-            ["Date of birth", data.extractedDob || "—"],
-            ["Address", data.extractedAddress || "—"],
           ]}
         />
       </div>
@@ -1472,11 +1469,6 @@ function SuccessScreen({
       credit: data.creditHistory,
       ukResident: data.ukResident,
       contact: { mobile: data.mobile, email: data.email },
-      applicant: {
-        name: data.extractedFullName,
-        dob: data.extractedDob,
-        address: data.extractedAddress,
-      },
     };
     const blob = new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
