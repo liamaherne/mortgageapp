@@ -772,15 +772,15 @@ function StepMortgage({
             active={data.purpose === "purchase"}
             onClick={() => update("purpose", "purchase")}
             icon={Home}
-            title="Purchase a Property"
+            title="First Time Buyer"
             desc="I'm buying a new home."
           />
           <OptionCard
             active={data.purpose === "remortgage"}
             onClick={() => update("purpose", "remortgage")}
             icon={Landmark}
-            title="Remortgage"
-            desc="Switching my current mortgage."
+            title="Switcher/ Mover"
+            desc="Switching my current mortgage or moving home."
           />
           <OptionCard
             active={data.purpose === "buy-to-let"}
@@ -793,8 +793,8 @@ function StepMortgage({
             active={data.purpose === "transfer-of-equity"}
             onClick={() => update("purpose", "transfer-of-equity")}
             icon={Users}
-            title="Transfer of Equity"
-            desc="Changing owners on the title."
+            title="Equity Release"
+            desc="Releasing Equity from my home."
           />
         </div>
       </QuestionBlock>
