@@ -90,13 +90,6 @@ type FormData = {
   email: string;
   marketingOptIn: boolean;
   // Step 7
-  identityDoc: { name: string; size: number } | null;
-  addressDoc: { name: string; size: number } | null;
-  extractedFullName: string;
-  extractedDob: string;
-  extractedAddress: string;
-  extractionConfidence: number;
-  // Step 8
   agreed: boolean;
 };
 
@@ -117,12 +110,6 @@ const EMPTY: FormData = {
   mobile: "",
   email: "",
   marketingOptIn: false,
-  identityDoc: null,
-  addressDoc: null,
-  extractedFullName: "",
-  extractedDob: "",
-  extractedAddress: "",
-  extractionConfidence: 0,
   agreed: false,
 };
 
@@ -133,10 +120,9 @@ const STEPS = [
   { id: 4, label: "Credit", icon: FileCheck2 },
   { id: 5, label: "Residency", icon: MapPin },
   { id: 6, label: "Contact", icon: Phone },
-  { id: 7, label: "Documents", icon: FileText },
-  { id: 8, label: "Review", icon: CheckCircle2 },
-  { id: 9, label: "Passport", icon: ShieldCheck },
-  { id: 10, label: "Bank statement", icon: Building2 },
+  { id: 7, label: "Review", icon: CheckCircle2 },
+  { id: 8, label: "Passport", icon: ShieldCheck },
+  { id: 9, label: "Bank statement", icon: Building2 },
 ] as const;
 
 const STORAGE_KEY = "mortgageflow_draft_v1";
@@ -276,31 +262,23 @@ function MortgageFlowPage() {
             />
           )}
           {step === 7 && (
-            <StepDocuments
-              data={data}
-              update={update}
-              onBack={() => setStep(6)}
-              onNext={() => setStep(8)}
-            />
-          )}
-          {step === 8 && (
             <StepReview
               data={data}
               ltv={ltv}
-              onBack={() => setStep(7)}
-              onSubmit={() => setStep(9)}
+              onBack={() => setStep(6)}
+              onSubmit={() => setStep(8)}
               update={update}
             />
           )}
-          {step === 9 && (
+          {step === 8 && (
             <StepPassport
-              onBack={() => setStep(8)}
-              onComplete={() => setStep(10)}
+              onBack={() => setStep(7)}
+              onComplete={() => setStep(9)}
             />
           )}
-          {step === 10 && (
+          {step === 9 && (
             <StepBankStatement
-              onBack={() => setStep(9)}
+              onBack={() => setStep(8)}
               onComplete={submit}
             />
           )}
@@ -1328,227 +1306,9 @@ function StepContact({
 }
 
 // -----------------------------------------------------------------------------
-// Step 7 — Document verification (with mock AI extraction)
+// Step 7 — Review
 // -----------------------------------------------------------------------------
 
-function StepDocuments({
-  data,
-  update,
-  onBack,
-  onNext,
-}: {
-  data: FormData;
-  update: <K extends keyof FormData>(k: K, v: FormData[K]) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const [extracting, setExtracting] = useState(false);
-  const [extracted, setExtracted] = useState(data.extractionConfidence > 0);
-
-  const runExtraction = (file: File) => {
-    // Simulated AI extraction (front-end demo only). Real OCR lives in the
-    // back-office passport intake below.
-    setExtracting(true);
-    setTimeout(() => {
-      const name = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
-      const guessName = name.split(" ").slice(0, 3).join(" ") || "Alex J. Morgan";
-      update("extractedFullName", guessName.replace(/\b\w/g, (c) => c.toUpperCase()));
-      update("extractedDob", "1990-04-12");
-      update("extractedAddress", "221B Baker Street, London, NW1 6XE");
-      update("extractionConfidence", 0.86);
-      setExtracted(true);
-      setExtracting(false);
-      toast.success("Details extracted — please review below.");
-    }, 1200);
-  };
-
-  const canContinue =
-    data.identityDoc &&
-    data.addressDoc &&
-    data.extractedFullName &&
-    data.extractedDob &&
-    data.extractedAddress;
-
-  return (
-    <div>
-      <StepHeader
-        title="Verify your identity"
-        subtitle="Upload your documents — we'll pre-fill the rest."
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <DocSlot
-          title="Proof of Identity"
-          desc="Passport or driving licence"
-          file={data.identityDoc}
-          onFile={(f) => {
-            update("identityDoc", { name: f.name, size: f.size });
-            runExtraction(f);
-          }}
-          onClear={() => update("identityDoc", null)}
-        />
-        <DocSlot
-          title="Proof of Address"
-          desc="Utility bill or bank letter"
-          file={data.addressDoc}
-          onFile={(f) => update("addressDoc", { name: f.name, size: f.size })}
-          onClear={() => update("addressDoc", null)}
-        />
-      </div>
-
-      {extracting && (
-        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#0b1436]/10 bg-white p-4 text-sm">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#0b1436] text-[#e9c46a]">
-            <Sparkles className="h-4 w-4 animate-pulse" />
-          </span>
-          <div>
-            <p className="font-semibold">Reading your document…</p>
-            <p className="text-[#0b1436]/60">Extracting name, date of birth and address.</p>
-          </div>
-        </div>
-      )}
-
-      {extracted && !extracting && (
-        <div className="mt-6 rounded-2xl border border-[#e9c46a]/40 bg-white p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0b1436]/60">
-                AI extraction
-              </p>
-              <h4 className="text-base font-semibold">
-                Please review the information extracted from your documents.
-              </h4>
-            </div>
-            <Badge className="gap-1 bg-[#e9c46a] text-[#0b1436] hover:bg-[#e9c46a]">
-              <Sparkles className="h-3 w-3" />
-              {Math.round(data.extractionConfidence * 100)}% confidence
-            </Badge>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <ExtractedField
-              label="Full Name"
-              value={data.extractedFullName}
-              onChange={(v) => update("extractedFullName", v)}
-            />
-            <ExtractedField
-              label="Date of Birth"
-              type="date"
-              value={data.extractedDob}
-              onChange={(v) => update("extractedDob", v)}
-            />
-            <ExtractedField
-              label="Address"
-              value={data.extractedAddress}
-              onChange={(v) => update("extractedAddress", v)}
-            />
-          </div>
-          <p className="mt-3 text-xs text-[#0b1436]/55">
-            You can edit any value above — corrections are recorded in the audit trail.
-          </p>
-        </div>
-      )}
-
-      <StepNav onBack={onBack} onNext={onNext} nextDisabled={!canContinue} />
-    </div>
-  );
-}
-
-function DocSlot({
-  title,
-  desc,
-  file,
-  onFile,
-  onClear,
-}: {
-  title: string;
-  desc: string;
-  file: { name: string; size: number } | null;
-  onFile: (f: File) => void;
-  onClear: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  return (
-    <div className="rounded-2xl border border-[#0b1436]/10 bg-white p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold">{title}</p>
-          <p className="text-xs text-[#0b1436]/55">{desc}</p>
-        </div>
-        {file ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-            <CheckCircle2 className="h-3 w-3" /> Uploaded
-          </span>
-        ) : (
-          <span className="text-[11px] font-medium text-[#0b1436]/40">Required</span>
-        )}
-      </div>
-      {file ? (
-        <div className="flex items-center justify-between rounded-xl bg-[#0b1436]/[0.03] px-3 py-2.5 text-sm">
-          <span className="flex min-w-0 items-center gap-2">
-            <FileText className="h-4 w-4 shrink-0 text-[#0b1436]/60" />
-            <span className="truncate">{file.name}</span>
-          </span>
-          <button
-            onClick={onClear}
-            className="text-[#0b1436]/40 hover:text-[#0b1436]"
-            aria-label="Remove file"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-[#0b1436]/15 py-6 text-sm text-[#0b1436]/70 transition-colors hover:border-[#0b1436]/40 hover:bg-[#0b1436]/[0.02]"
-        >
-          <Upload className="h-4 w-4" />
-          <span>PDF, JPG, JPEG, PNG</span>
-        </button>
-      )}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="application/pdf,image/png,image/jpeg,image/jpg"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onFile(f);
-        }}
-      />
-    </div>
-  );
-}
-
-function ExtractedField({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs font-medium uppercase tracking-wider text-[#0b1436]/55">
-        {label}
-      </Label>
-      <Input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-11 rounded-lg border-[#0b1436]/12"
-      />
-    </div>
-  );
-}
-
-// -----------------------------------------------------------------------------
-// Step 8 — Review
-// -----------------------------------------------------------------------------
 
 function StepReview({
   data,
@@ -1610,13 +1370,10 @@ function StepReview({
           ]}
         />
         <ReviewCard
-          title="Contact & identity"
+          title="Contact"
           rows={[
             ["Mobile", data.mobile || "—"],
             ["Email", data.email || "—"],
-            ["Full name", data.extractedFullName || "—"],
-            ["Date of birth", data.extractedDob || "—"],
-            ["Address", data.extractedAddress || "—"],
           ]}
         />
       </div>
@@ -1712,11 +1469,6 @@ function SuccessScreen({
       credit: data.creditHistory,
       ukResident: data.ukResident,
       contact: { mobile: data.mobile, email: data.email },
-      applicant: {
-        name: data.extractedFullName,
-        dob: data.extractedDob,
-        address: data.extractedAddress,
-      },
     };
     const blob = new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1798,7 +1550,7 @@ function SuccessScreen({
 }
 
 // -----------------------------------------------------------------------------
-// Step 9 — Passport intake (back-office verification)
+// Step 8 — Passport intake (back-office verification)
 // -----------------------------------------------------------------------------
 
 const PASSPORT_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
@@ -2297,7 +2049,7 @@ function ExpiryFlag({ expiry }: { expiry: string }) {
 }
 
 // -----------------------------------------------------------------------------
-// Step 10 — Bank statement intake
+// Step 9 — Bank statement intake
 // -----------------------------------------------------------------------------
 
 const BANK_ACCEPTED = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
