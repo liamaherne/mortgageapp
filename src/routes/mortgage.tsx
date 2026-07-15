@@ -133,10 +133,9 @@ const STEPS = [
   { id: 4, label: "Credit", icon: FileCheck2 },
   { id: 5, label: "Residency", icon: MapPin },
   { id: 6, label: "Contact", icon: Phone },
-  { id: 7, label: "Documents", icon: FileText },
-  { id: 8, label: "Review", icon: CheckCircle2 },
-  { id: 9, label: "Passport", icon: ShieldCheck },
-  { id: 10, label: "Bank statement", icon: Building2 },
+  { id: 7, label: "Review", icon: CheckCircle2 },
+  { id: 8, label: "Passport", icon: ShieldCheck },
+  { id: 9, label: "Bank statement", icon: Building2 },
 ] as const;
 
 const STORAGE_KEY = "mortgageflow_draft_v1";
