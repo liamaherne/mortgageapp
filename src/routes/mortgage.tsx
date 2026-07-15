@@ -1258,7 +1258,7 @@ function StepContact({
   onNext: () => void;
 }) {
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email);
-  const mobileValid = /^(?:\+?44|0)7\d{9}$/.test(data.mobile.replace(/\s/g, ""));
+  const mobileValid = /^(?:\+?353|0)8\d{8}$/.test(data.mobile.replace(/\s/g, ""));
   const canContinue = emailValid && mobileValid;
 
   return (
@@ -1276,7 +1276,7 @@ function StepContact({
               id="mobile"
               value={data.mobile}
               onChange={(e) => update("mobile", e.target.value)}
-              placeholder="07123 456789"
+              placeholder="087 123 4567"
               className={cn(
                 "h-14 rounded-xl border-[#0b1436]/12 pl-11 text-base",
                 data.mobile && !mobileValid && "border-red-400 focus-visible:ring-red-400/20",
@@ -1284,7 +1284,7 @@ function StepContact({
             />
           </div>
           {data.mobile && !mobileValid && (
-            <p className="text-xs text-red-600">Enter a valid UK mobile number.</p>
+            <p className="text-xs text-red-600">Enter a valid Ireland mobile number.</p>
           )}
         </div>
         <div className="space-y-2">
