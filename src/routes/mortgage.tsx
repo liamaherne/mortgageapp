@@ -2214,7 +2214,7 @@ function StepBankStatement({
   onComplete,
 }: {
   onBack: () => void;
-  onComplete: () => void;
+  onComplete: (data: BankSummary) => void;
 }) {
   const runExtract = useServerFn(extractBankStatement);
   const inputRef = useRef<HTMLInputElement>(null);
