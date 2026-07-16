@@ -204,8 +204,19 @@ function MortgageFlowPage() {
   }
 
   if (screen === "success") {
-    return <SuccessScreen reference={reference!} submittedAt={submittedAt!} data={data} ltv={ltv} />;
+    return (
+      <SuccessScreen
+        reference={reference!}
+        submittedAt={submittedAt!}
+        data={data}
+        ltv={ltv}
+        depositPct={depositPct}
+        passport={passportData}
+        bank={bankData}
+      />
+    );
   }
+
 
   return (
     <PageShell>
