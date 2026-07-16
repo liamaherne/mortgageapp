@@ -2429,7 +2429,21 @@ function StepBankStatement({
             return;
           }
           toast.success("Bank statement verified. Finalising your application…");
-          onComplete();
+          onComplete({
+            bankName: form.bankName.trim(),
+            iban: form.iban,
+            bic: form.bic,
+            accountHolderName: form.accountHolderName.trim(),
+            accountHolderAddress: form.accountHolderAddress.trim(),
+            statementDate: form.statementDate,
+            derivedCountry: derived?.country ?? null,
+            derivedBBAN: derived?.bban ?? null,
+            derivedAccountNumber: derived?.account ?? null,
+            ibanValid,
+            freshnessLabel: freshness.label,
+            fileName: file?.name ?? null,
+          });
+
         }}
         nextLabel="Finish Application"
         nextDisabled={status === "idle" || status === "extracting" || !canSubmit}
