@@ -287,15 +287,22 @@ function MortgageFlowPage() {
           {step === 8 && (
             <StepPassport
               onBack={() => setStep(7)}
-              onComplete={() => setStep(9)}
+              onComplete={(pd) => {
+                setPassportData(pd);
+                setStep(9);
+              }}
             />
           )}
           {step === 9 && (
             <StepBankStatement
               onBack={() => setStep(8)}
-              onComplete={submit}
+              onComplete={(bd) => {
+                setBankData(bd);
+                submit();
+              }}
             />
           )}
+
         </div>
       </div>
     </PageShell>
