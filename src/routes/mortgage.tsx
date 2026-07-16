@@ -1496,32 +1496,92 @@ function SuccessScreen({
   submittedAt,
   data,
   ltv,
+  depositPct,
+  passport,
+  bank,
 }: {
   reference: string;
   submittedAt: string;
   data: FormData;
   ltv: number;
+  depositPct: number;
+  passport: PassportSummary | null;
+  bank: BankSummary | null;
 }) {
+  const fmt = (v: string | number | null | undefined) =>
+    v === null || v === undefined || v === "" ? "—" : String(v);
+  const fmtMoney = (v: string) => (v ? `£${Number(v).toLocaleString()}` : "—");
+
+  const mortgageRows: [string, string][] = [
+    ["Purpose", fmt(data.purpose)],
+    ["Applicant type", fmt(data.applicantType)],
+    ["Property value", fmtMoney(data.propertyValue)],
+    ["Loan amount", fmtMoney(data.loanAmount)],
+    ["Deposit", fmtMoney(data.deposit)],
+    ["Loan-to-Value (LTV)", `${ltv}%`],
+    ["Deposit %", `${depositPct}%`],
+  ];
+  const propertyRows: [string, string][] = [
+    ["Property type", fmt(data.propertyType)],
+    ["Owns other properties", fmt(data.ownsOtherProperties)],
+    ["Other properties count", fmt(data.otherPropertiesCount)],
+    ["Other properties value", data.otherPropertiesValue ? fmtMoney(data.otherPropertiesValue) : "—"],
+  ];
+  const incomeRows: [string, string][] = [
+    ["Employment", fmt(data.employment)],
+  ];
+  const creditRows: [string, string][] = [
+    ["Credit history", data.creditHistory.length ? data.creditHistory.join(", ") : "None"],
+  ];
+  const residencyRows: [string, string][] = [
+    ["UK resident", fmt(data.ukResident)],
+  ];
+  const contactRows: [string, string][] = [
+    ["Mobile", fmt(data.mobile)],
+    ["Email", fmt(data.email)],
+    ["Marketing opt-in", data.marketingOptIn ? "Yes" : "No"],
+  ];
+
+  const idRows: [string, string][] = passport
+    ? [
+        ["Document type", DOC_TYPE_LABELS[passport.documentType]],
+        ["Full name", fmt(passport.fullName)],
+        ["Date of birth", fmt(passport.dateOfBirth)],
+        ["Address", fmt(passport.address)],
+        ["Expiry date", fmt(passport.passportExpiry)],
+        ["Source file", fmt(passport.fileName)],
+      ]
+    : [];
+
+  const bankRows: [string, string][] = bank
+    ? [
+        ["Bank name", fmt(bank.bankName)],
+        ["Account holder", fmt(bank.accountHolderName)],
+        ["Holder address", fmt(bank.accountHolderAddress)],
+        ["IBAN", fmt(bank.iban)],
+        ["IBAN valid", bank.ibanValid ? "Yes" : "No"],
+        ["BIC / SWIFT", fmt(bank.bic)],
+        ["Country", fmt(bank.derivedCountry)],
+        ["BBAN", fmt(bank.derivedBBAN)],
+        ["Account number", fmt(bank.derivedAccountNumber)],
+        ["Statement date", fmt(bank.statementDate)],
+        ["Freshness", fmt(bank.freshnessLabel)],
+        ["Source file", fmt(bank.fileName)],
+      ]
+    : [];
+
   const download = () => {
     const summary = {
       reference,
       submittedAt,
-      ltv,
-      mortgage: {
-        purpose: data.purpose,
-        applicantType: data.applicantType,
-        propertyValue: data.propertyValue,
-        loanAmount: data.loanAmount,
-        deposit: data.deposit,
-      },
-      property: {
-        type: data.propertyType,
-        ownsOthers: data.ownsOtherProperties,
-      },
-      employment: data.employment,
-      credit: data.creditHistory,
-      ukResident: data.ukResident,
-      contact: { mobile: data.mobile, email: data.email },
+      mortgage: Object.fromEntries(mortgageRows),
+      property: Object.fromEntries(propertyRows),
+      income: Object.fromEntries(incomeRows),
+      credit: Object.fromEntries(creditRows),
+      residency: Object.fromEntries(residencyRows),
+      contact: Object.fromEntries(contactRows),
+      identityDocument: passport ? Object.fromEntries(idRows) : null,
+      bankStatement: bank ? Object.fromEntries(bankRows) : null,
     };
     const blob = new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1532,9 +1592,11 @@ function SuccessScreen({
     URL.revokeObjectURL(url);
   };
 
+  const printSummary = () => window.print();
+
   return (
     <div className="min-h-screen bg-[#f6f7fb]">
-      <header className="border-b border-[#0b1436]/8 bg-white">
+      <header className="border-b border-[#0b1436]/8 bg-white print:hidden">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
           <BrandMark />
           <Link to="/" className="text-sm text-[#0b1436]/70 hover:text-[#0b1436]">
@@ -1542,7 +1604,7 @@ function SuccessScreen({
           </Link>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
+      <main className="mx-auto w-full max-w-4xl px-4 py-12 sm:px-6">
         <div className="rounded-3xl bg-white p-8 shadow-[0_30px_80px_-30px_rgba(11,20,54,0.25)] ring-1 ring-[#0b1436]/5 sm:p-12">
           <div className="flex flex-col items-center text-center">
             <span className="grid h-16 w-16 place-items-center rounded-2xl bg-emerald-100 text-emerald-700">
@@ -1552,8 +1614,8 @@ function SuccessScreen({
               Application Submitted Successfully
             </h1>
             <p className="mt-3 max-w-md text-[15px] text-[#0b1436]/65">
-              Thank you for your application. Our mortgage specialists will review your information
-              and contact you shortly regarding the next steps.
+              Thank you for your application. Below is a complete summary of every data point
+              captured in your journey, including details extracted from your ID and bank statement.
             </p>
           </div>
 
@@ -1572,12 +1634,35 @@ function SuccessScreen({
             </div>
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <section className="mt-10 space-y-6">
+            <h2 className="text-xl font-semibold text-[#0b1436]">Application summary sheet</h2>
+            <SummarySection title="Mortgage" rows={mortgageRows} />
+            <SummarySection title="Property" rows={propertyRows} />
+            <SummarySection title="Income" rows={incomeRows} />
+            <SummarySection title="Credit" rows={creditRows} />
+            <SummarySection title="Residency" rows={residencyRows} />
+            <SummarySection title="Contact" rows={contactRows} />
+            {passport && (
+              <SummarySection title="Identity document (extracted)" rows={idRows} />
+            )}
+            {bank && (
+              <SummarySection title="Bank statement (extracted)" rows={bankRows} />
+            )}
+          </section>
+
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row print:hidden">
             <Button
               onClick={download}
               className="h-12 flex-1 bg-[#0b1436] text-white hover:bg-[#111c4b]"
             >
-              Download Application Summary
+              Download Summary (JSON)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={printSummary}
+              className="h-12 flex-1 border-[#0b1436]/15 text-[#0b1436] hover:bg-[#0b1436]/5"
+            >
+              Print / Save as PDF
             </Button>
             <Button
               variant="outline"
@@ -1591,7 +1676,7 @@ function SuccessScreen({
             </Button>
           </div>
 
-          <div className="mt-8 flex items-center gap-2 rounded-xl bg-[#e9c46a]/10 px-4 py-3 text-xs text-[#0b1436]/75">
+          <div className="mt-8 flex items-center gap-2 rounded-xl bg-[#e9c46a]/10 px-4 py-3 text-xs text-[#0b1436]/75 print:hidden">
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
             Your uploaded documents were processed for assessment only and are not retained longer
             than necessary.
@@ -1601,6 +1686,25 @@ function SuccessScreen({
     </div>
   );
 }
+
+function SummarySection({ title, rows }: { title: string; rows: [string, string][] }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#0b1436]/10">
+      <div className="bg-[#0b1436] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#e9c46a]">
+        {title}
+      </div>
+      <dl className="divide-y divide-[#0b1436]/10 bg-white">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-[220px_1fr] sm:items-center">
+            <dt className="text-xs font-semibold uppercase tracking-wider text-[#0b1436]/60">{label}</dt>
+            <dd className="break-words text-sm text-[#0b1436]">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 
 // -----------------------------------------------------------------------------
 // Step 8 — Passport intake (back-office verification)
