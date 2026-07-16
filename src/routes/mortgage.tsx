@@ -1672,8 +1672,9 @@ function StepPassport({
   onComplete,
 }: {
   onBack: () => void;
-  onComplete: () => void;
+  onComplete: (data: PassportSummary) => void;
 }) {
+
   const runExtract = useServerFn(extractPassport);
   const runSubmit = useServerFn(submitApplication);
   const inputRef = useRef<HTMLInputElement>(null);
