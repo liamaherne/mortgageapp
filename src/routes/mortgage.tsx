@@ -137,6 +137,9 @@ function MortgageFlowPage() {
   const [data, setData] = useState<FormData>(EMPTY);
   const [reference, setReference] = useState<string | null>(null);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [passportData, setPassportData] = useState<PassportSummary | null>(null);
+  const [bankData, setBankData] = useState<BankSummary | null>(null);
+
 
   // Hydrate saved draft
   useEffect(() => {
