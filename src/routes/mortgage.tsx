@@ -1784,7 +1784,22 @@ function StepPassport({
         },
       });
       toast.success("Identity verified. Finalising your application…");
-      onComplete();
+      onComplete({
+        documentType: form.documentType,
+        fullName: form.fullName.trim(),
+        dateOfBirth: form.dateOfBirth,
+        address: form.address.trim() || null,
+        passportExpiry: form.passportExpiry,
+        extractedConfidence: {
+          documentType: extracted.confidence.documentType ?? 0,
+          fullName: extracted.confidence.fullName ?? 0,
+          dateOfBirth: extracted.confidence.dateOfBirth ?? 0,
+          address: extracted.confidence.address ?? 0,
+          passportExpiry: extracted.confidence.passportExpiry ?? 0,
+        },
+        fileName: file?.name ?? null,
+      });
+
     } catch (e) {
       console.error(e);
       const msg = e instanceof Error ? e.message : "Submission failed.";
