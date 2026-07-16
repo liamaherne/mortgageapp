@@ -127,6 +127,38 @@ const STEPS = [
 
 const STORAGE_KEY = "mortgageflow_draft_v1";
 
+type PassportSummary = {
+  documentType: "passport" | "driver_license" | "national_id" | "unknown";
+  fullName: string;
+  dateOfBirth: string;
+  address: string | null;
+  passportExpiry: string;
+  extractedConfidence: {
+    documentType: number;
+    fullName: number;
+    dateOfBirth: number;
+    address: number;
+    passportExpiry: number;
+  };
+  fileName: string | null;
+};
+
+type BankSummary = {
+  bankName: string;
+  iban: string;
+  bic: string;
+  accountHolderName: string;
+  accountHolderAddress: string;
+  statementDate: string;
+  derivedCountry: string | null;
+  derivedBBAN: string | null;
+  derivedAccountNumber: string | null;
+  ibanValid: boolean;
+  freshnessLabel: string;
+  fileName: string | null;
+};
+
+
 // -----------------------------------------------------------------------------
 // Page
 // -----------------------------------------------------------------------------
